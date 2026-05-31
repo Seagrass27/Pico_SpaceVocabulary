@@ -34,7 +34,7 @@ fun mainApp(scope: SpatialAppScope) =
             defaultSize = WindowContainerSize(width = 820.dp, height = 720.dp),
             placement = {
                 containers.firstOrNull { it.state.isFocused }?.let {
-                    Placement.bottom(it, offset = (-620).dp)
+                    Placement.right(it, offset = 48.dp)
                 } ?: Placement.none()
             }
         ) {

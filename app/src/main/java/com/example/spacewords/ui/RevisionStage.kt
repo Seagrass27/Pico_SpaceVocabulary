@@ -54,13 +54,6 @@ fun RevisionStage() {
     val selectedWord = selectedId?.let { findWord(it) }
     val spatialNavigator = LocalSpatialNavigator.current
     val coroutineScope = rememberCoroutineScope()
-    val closeRevision = {
-        coroutineScope.launch {
-            spatialNavigator.restoreWindowContainer(HomeWindowId)
-            spatialNavigator.closeStage()
-        }
-        Unit
-    }
 
     key(version) {
         SpatialView(
@@ -95,11 +88,17 @@ fun RevisionStage() {
                 }
                 AttachmentPanel(id = "selected-card") {
                     if (selectedWord == null) {
-                        EmptyRevisionCard(onClose = closeRevision)
+                        EmptyRevisionCard(
+                            onClose = {
+                                coroutineScope.launch {
+                                    spatialNavigator.restoreWindowContainer(HomeWindowId)
+                                    spatialNavigator.closeStage()
+                                }
+                            }
+                        )
                     } else {
                         RevisionWordCard(
                             word = selectedWord,
-                            onClose = closeRevision,
                             onRemembered = {
                                 SpaceWordsStore.markRemembered(selectedWord.id)
                                 selectedId = SpaceWordsStore.revisionWords().firstOrNull()?.wordId
@@ -142,12 +141,7 @@ private fun OrbitWordTag(word: VocabWord, isOlder: Boolean, onClick: () -> Unit)
 }
 
 @Composable
-private fun RevisionWordCard(
-    word: VocabWord,
-    onClose: () -> Unit,
-    onRemembered: () -> Unit,
-    onKeep: () -> Unit
-) {
+private fun RevisionWordCard(word: VocabWord, onRemembered: () -> Unit, onKeep: () -> Unit) {
     Column(
         modifier = Modifier
             .size(width = 560.dp, height = 430.dp)
@@ -156,17 +150,13 @@ private fun RevisionWordCard(
             .padding(28.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                modifier = Modifier.weight(1f),
-                text = word.word,
-                color = Color(0xFF17202C),
-                fontSize = 46.sp,
-                fontWeight = FontWeight.Bold,
-                textAlign = TextAlign.Center
-            )
-            StageActionButton(onClick = onClose, modifier = Modifier.size(width = 88.dp, height = 48.dp), label = "Close")
-        }
+        Text(
+            text = word.word,
+            color = Color(0xFF17202C),
+            fontSize = 46.sp,
+            fontWeight = FontWeight.Bold,
+            textAlign = TextAlign.Center
+        )
         Spacer(Modifier.height(6.dp))
         Text(text = word.phonetic, color = Color(0xFF657386), fontSize = 20.sp)
         Spacer(Modifier.height(12.dp))

@@ -81,8 +81,8 @@ fun HomeScreen(modifier: Modifier = Modifier) {
                     enabled = revisionCount > 0,
                     onClick = {
                         coroutineScope.launch {
-                            spatialNavigator.openStage(RevisionStageId, style = StageStyle.Mixed)
                             spatialNavigator.minimizeWindowContainer()
+                            spatialNavigator.openStage(RevisionStageId, style = StageStyle.Mixed)
                         }
                     }
                 )
