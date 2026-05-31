@@ -30,9 +30,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.spacewords.HomeWindowId
 import com.example.spacewords.data.SpaceWordsStore
+import com.example.spacewords.data.WordProgress
 import com.example.spacewords.model.VocabWord
 import com.example.spacewords.model.findWord
 import com.pico.spatial.core.ecs.TransformComponent
+import com.pico.spatial.core.math.EulerAngles
 import com.pico.spatial.core.math.Vector3
 import com.pico.spatial.ui.design.Text
 import com.pico.spatial.ui.foundation.content.SpatialView
@@ -49,19 +51,30 @@ fun RevisionStage() {
     SpaceWordsStore.ensureLoaded(LocalContext.current)
     val version by SpaceWordsStore.version
     val revision = SpaceWordsStore.revisionWords()
-    val words = revision.mapNotNull { findWord(it.wordId) }
+    val orbitWords = revision.mapNotNull { progress ->
+        findWord(progress.wordId)?.let { OrbitWord(it, progress) }
+    }
+    val words = orbitWords.map { it.word }
     var selectedId by remember(version) { mutableStateOf(words.firstOrNull()?.id) }
     val selectedWord = selectedId?.let { findWord(it) }
     val spatialNavigator = LocalSpatialNavigator.current
     val coroutineScope = rememberCoroutineScope()
+    val closeRevision = {
+        coroutineScope.launch {
+            spatialNavigator.restoreWindowContainer(HomeWindowId)
+            spatialNavigator.closeStage()
+        }
+        Unit
+    }
 
     key(version) {
         SpatialView(
             initial = { content, attachments ->
-                words.forEachIndexed { index, word ->
+                orbitWords.forEachIndexed { index, orbitWord ->
+                    val word = orbitWord.word
                     val attachment = attachments.entity(id = tagId(word.id)) ?: return@forEachIndexed
-                    val distance = 0.9f + index * 0.08f
-                    val angle = (-130f + (260f / words.size.coerceAtLeast(1)) * index) * PI.toFloat() / 180f
+                    val distance = orbitDistance(index = index, count = orbitWords.size)
+                    val angle = orbitAngle(index = index, count = orbitWords.size)
                     attachment.components[TransformComponent::class.java]?.setPosition(
                         Vector3(
                             sin(angle) * distance,
@@ -69,36 +82,44 @@ fun RevisionStage() {
                             -cos(angle) * distance
                         )
                     )
+                    attachment.components[TransformComponent::class.java]?.setEulerAngles(
+                        EulerAngles(0f, angle * 180f / PI.toFloat(), 0f)
+                    )
                     content.addEntity(attachment)
                 }
                 attachments.entity(id = "selected-card")?.let { card ->
-                    card.components[TransformComponent::class.java]?.setPosition(Vector3(0f, 1.55f, -1.25f))
+                    card.components[TransformComponent::class.java]?.setPosition(Vector3(0f, 1.55f, -1.05f))
                     content.addEntity(card)
+                }
+                attachments.entity(id = "close-revision")?.let { close ->
+                    close.components[TransformComponent::class.java]?.setPosition(Vector3(0.72f, 2.12f, -1.0f))
+                    content.addEntity(close)
                 }
             },
             attachments = {
-                words.forEachIndexed { index, word ->
-                    AttachmentPanel(id = tagId(word.id)) {
+                orbitWords.forEachIndexed { index, orbitWord ->
+                    AttachmentPanel(id = tagId(orbitWord.word.id)) {
                         OrbitWordTag(
-                            word = word,
-                            isOlder = index < 3,
-                            onClick = { selectedId = word.id }
+                            word = orbitWord.word,
+                            distance = orbitDistance(index = index, count = orbitWords.size),
+                            onClick = { selectedId = orbitWord.word.id }
                         )
                     }
                 }
+                AttachmentPanel(id = "close-revision") {
+                    StageActionButton(
+                        onClick = closeRevision,
+                        modifier = Modifier.size(width = 132.dp, height = 54.dp),
+                        label = "Close"
+                    )
+                }
                 AttachmentPanel(id = "selected-card") {
                     if (selectedWord == null) {
-                        EmptyRevisionCard(
-                            onClose = {
-                                coroutineScope.launch {
-                                    spatialNavigator.restoreWindowContainer(HomeWindowId)
-                                    spatialNavigator.closeStage()
-                                }
-                            }
-                        )
+                        EmptyRevisionCard(onClose = closeRevision)
                     } else {
                         RevisionWordCard(
                             word = selectedWord,
+                            onClose = closeRevision,
                             onRemembered = {
                                 SpaceWordsStore.markRemembered(selectedWord.id)
                                 selectedId = SpaceWordsStore.revisionWords().firstOrNull()?.wordId
@@ -115,7 +136,8 @@ fun RevisionStage() {
 }
 
 @Composable
-private fun OrbitWordTag(word: VocabWord, isOlder: Boolean, onClick: () -> Unit) {
+private fun OrbitWordTag(word: VocabWord, distance: Float, onClick: () -> Unit) {
+    val priority = ((1.85f - distance) / 1.0f).coerceIn(0f, 1f)
     Box(
         modifier = Modifier
             .size(width = 190.dp, height = 76.dp)
@@ -126,7 +148,7 @@ private fun OrbitWordTag(word: VocabWord, isOlder: Boolean, onClick: () -> Unit)
             modifier = Modifier
                 .fillMaxSize()
                 .clip(RoundedCornerShape(18.dp))
-                .background(if (isOlder) Color(0xFFE6F0FF).copy(alpha = 0.72f) else Color.White.copy(alpha = 0.46f)),
+                .background(Color(0xFFE6F0FF).copy(alpha = 0.42f + priority * 0.34f)),
             contentAlignment = Alignment.Center
         ) {
             Text(
@@ -141,7 +163,12 @@ private fun OrbitWordTag(word: VocabWord, isOlder: Boolean, onClick: () -> Unit)
 }
 
 @Composable
-private fun RevisionWordCard(word: VocabWord, onRemembered: () -> Unit, onKeep: () -> Unit) {
+private fun RevisionWordCard(
+    word: VocabWord,
+    onClose: () -> Unit,
+    onRemembered: () -> Unit,
+    onKeep: () -> Unit
+) {
     Column(
         modifier = Modifier
             .size(width = 560.dp, height = 430.dp)
@@ -150,13 +177,21 @@ private fun RevisionWordCard(word: VocabWord, onRemembered: () -> Unit, onKeep: 
             .padding(28.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Text(
-            text = word.word,
-            color = Color(0xFF17202C),
-            fontSize = 46.sp,
-            fontWeight = FontWeight.Bold,
-            textAlign = TextAlign.Center
-        )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                modifier = Modifier.weight(1f),
+                text = word.word,
+                color = Color(0xFF17202C),
+                fontSize = 46.sp,
+                fontWeight = FontWeight.Bold,
+                textAlign = TextAlign.Center
+            )
+            StageActionButton(
+                onClick = onClose,
+                modifier = Modifier.size(width = 88.dp, height = 48.dp),
+                label = "Close"
+            )
+        }
         Spacer(Modifier.height(6.dp))
         Text(text = word.phonetic, color = Color(0xFF657386), fontSize = 20.sp)
         Spacer(Modifier.height(12.dp))
@@ -194,6 +229,23 @@ private fun EmptyRevisionCard(onClose: () -> Unit) {
 }
 
 private fun tagId(wordId: String) = "word-$wordId"
+
+private data class OrbitWord(
+    val word: VocabWord,
+    val progress: WordProgress
+)
+
+private fun orbitDistance(index: Int, count: Int): Float {
+    if (count <= 1) return 0.85f
+    val normalized = index.toFloat() / (count - 1).toFloat()
+    return 0.85f + normalized * 1.0f
+}
+
+private fun orbitAngle(index: Int, count: Int): Float {
+    if (count <= 1) return 0f
+    val step = (2f * PI.toFloat()) / count.toFloat()
+    return index * step
+}
 
 @Composable
 private fun StageActionButton(onClick: () -> Unit, modifier: Modifier, label: String) {

@@ -26,6 +26,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.spacewords.HomeWindowId
 import com.example.spacewords.LearningWindowId
 import com.example.spacewords.LearningWindowTag
 import com.example.spacewords.RevisionStageId
@@ -81,8 +82,8 @@ fun HomeScreen(modifier: Modifier = Modifier) {
                     enabled = revisionCount > 0,
                     onClick = {
                         coroutineScope.launch {
-                            spatialNavigator.minimizeWindowContainer()
                             spatialNavigator.openStage(RevisionStageId, style = StageStyle.Mixed)
+                            spatialNavigator.minimizeWindowContainer(HomeWindowId)
                         }
                     }
                 )
