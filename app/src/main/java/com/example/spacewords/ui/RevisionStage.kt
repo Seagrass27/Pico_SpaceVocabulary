@@ -28,6 +28,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.spacewords.HomeWindowId
 import com.example.spacewords.data.SpaceWordsStore
 import com.example.spacewords.model.VocabWord
 import com.example.spacewords.model.findWord
@@ -87,7 +88,14 @@ fun RevisionStage() {
                 }
                 AttachmentPanel(id = "selected-card") {
                     if (selectedWord == null) {
-                        EmptyRevisionCard(onClose = { coroutineScope.launch { spatialNavigator.closeStage() } })
+                        EmptyRevisionCard(
+                            onClose = {
+                                coroutineScope.launch {
+                                    spatialNavigator.restoreWindowContainer(HomeWindowId)
+                                    spatialNavigator.closeStage()
+                                }
+                            }
+                        )
                     } else {
                         RevisionWordCard(
                             word = selectedWord,

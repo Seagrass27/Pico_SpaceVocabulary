@@ -37,6 +37,7 @@ import com.pico.spatial.ui.design.Text
 import com.pico.spatial.ui.foundation.material.backgroundMaterial
 import com.pico.spatial.ui.platform.Material
 import com.pico.spatial.ui.platform.containers.LocalSpatialNavigator
+import com.pico.spatial.ui.platform.containers.StageStyle
 import kotlinx.coroutines.launch
 import androidx.compose.runtime.rememberCoroutineScope
 
@@ -80,7 +81,8 @@ fun HomeScreen(modifier: Modifier = Modifier) {
                     enabled = revisionCount > 0,
                     onClick = {
                         coroutineScope.launch {
-                            spatialNavigator.openStage(RevisionStageId)
+                            spatialNavigator.minimizeWindowContainer()
+                            spatialNavigator.openStage(RevisionStageId, style = StageStyle.Mixed)
                         }
                     }
                 )
