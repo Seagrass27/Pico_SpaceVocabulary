@@ -55,7 +55,7 @@ fun RevisionStage() {
         findWord(progress.wordId)?.let { OrbitWord(it, progress) }
     }
     val words = orbitWords.map { it.word }
-    var selectedId by remember(version) { mutableStateOf(words.firstOrNull()?.id) }
+    var selectedId by remember(version) { mutableStateOf<String?>(null) }
     val selectedWord = selectedId?.let { findWord(it) }
     val spatialNavigator = LocalSpatialNavigator.current
     val coroutineScope = rememberCoroutineScope()
@@ -78,7 +78,7 @@ fun RevisionStage() {
                     attachment.components[TransformComponent::class.java]?.setPosition(
                         Vector3(
                             sin(angle) * distance,
-                            1.35f,
+                            1.42f,
                             -cos(angle) * distance
                         )
                     )
@@ -88,11 +88,11 @@ fun RevisionStage() {
                     content.addEntity(attachment)
                 }
                 attachments.entity(id = "selected-card")?.let { card ->
-                    card.components[TransformComponent::class.java]?.setPosition(Vector3(0f, 1.55f, -1.05f))
+                    card.components[TransformComponent::class.java]?.setPosition(Vector3(0f, 1.55f, -0.92f))
                     content.addEntity(card)
                 }
                 attachments.entity(id = "close-revision")?.let { close ->
-                    close.components[TransformComponent::class.java]?.setPosition(Vector3(0.72f, 2.12f, -1.0f))
+                    close.components[TransformComponent::class.java]?.setPosition(Vector3(0.78f, 2.05f, -0.9f))
                     content.addEntity(close)
                 }
             },
@@ -115,7 +115,11 @@ fun RevisionStage() {
                 }
                 AttachmentPanel(id = "selected-card") {
                     if (selectedWord == null) {
-                        EmptyRevisionCard(onClose = closeRevision)
+                        if (orbitWords.isEmpty()) {
+                            EmptyRevisionCard(onClose = closeRevision)
+                        } else {
+                            HiddenPanel()
+                        }
                     } else {
                         RevisionWordCard(
                             word = selectedWord,
@@ -236,15 +240,20 @@ private data class OrbitWord(
 )
 
 private fun orbitDistance(index: Int, count: Int): Float {
-    if (count <= 1) return 0.85f
+    if (count <= 1) return 1.1f
     val normalized = index.toFloat() / (count - 1).toFloat()
-    return 0.85f + normalized * 1.0f
+    return 1.1f + normalized * 1.2f
 }
 
 private fun orbitAngle(index: Int, count: Int): Float {
     if (count <= 1) return 0f
     val step = (2f * PI.toFloat()) / count.toFloat()
     return index * step
+}
+
+@Composable
+private fun HiddenPanel() {
+    Box(Modifier.size(1.dp))
 }
 
 @Composable
