@@ -54,9 +54,19 @@ fun RevisionStage() {
     val orbitWords = revision.mapNotNull { progress ->
         findWord(progress.wordId)?.let { OrbitWord(it, progress) }
     }
-    val words = orbitWords.map { it.word }
+    val orbitItems = orbitWords.mapIndexed { index, orbitWord ->
+        val angle = orbitAngle(index = index, count = orbitWords.size)
+        val distance = orbitDistance(index = index, count = orbitWords.size)
+        OrbitItem(
+            orbitWord = orbitWord,
+            angle = angle,
+            distance = distance,
+            position = orbitPosition(angle = angle, distance = distance, y = 1.42f)
+        )
+    }
     var selectedId by remember(version) { mutableStateOf<String?>(null) }
-    val selectedWord = selectedId?.let { findWord(it) }
+    val selectedItem = selectedId?.let { id -> orbitItems.firstOrNull { it.orbitWord.word.id == id } }
+    val selectedWord = selectedItem?.orbitWord?.word
     val spatialNavigator = LocalSpatialNavigator.current
     val coroutineScope = rememberCoroutineScope()
     val closeRevision = {
@@ -70,25 +80,25 @@ fun RevisionStage() {
     key(version) {
         SpatialView(
             initial = { content, attachments ->
-                orbitWords.forEachIndexed { index, orbitWord ->
-                    val word = orbitWord.word
-                    val attachment = attachments.entity(id = tagId(word.id)) ?: return@forEachIndexed
-                    val distance = orbitDistance(index = index, count = orbitWords.size)
-                    val angle = orbitAngle(index = index, count = orbitWords.size)
-                    attachment.components[TransformComponent::class.java]?.setPosition(
-                        Vector3(
-                            sin(angle) * distance,
-                            1.42f,
-                            -cos(angle) * distance
-                        )
-                    )
-                    attachment.components[TransformComponent::class.java]?.setEulerAngles(
-                        EulerAngles(0f, angle * 180f / PI.toFloat(), 0f)
-                    )
-                    content.addEntity(attachment)
+                orbitItems.forEach { item ->
+                    val word = item.orbitWord.word
+                    attachments.entity(id = tagId(word.id))?.let { attachment ->
+                        attachment.components[TransformComponent::class.java]?.setPosition(item.position)
+                        attachment.components[TransformComponent::class.java]?.setEulerAngles(faceCenterEuler(item.angle))
+                        content.addEntity(attachment)
+                    }
                 }
                 attachments.entity(id = "selected-card")?.let { card ->
-                    card.components[TransformComponent::class.java]?.setPosition(Vector3(0f, 1.55f, -0.92f))
+                    val item = selectedItem
+                    if (item == null) {
+                        card.components[TransformComponent::class.java]?.setPosition(Vector3(0f, 1.55f, -0.86f))
+                        card.components[TransformComponent::class.java]?.setEulerAngles(EulerAngles(0f, 0f, 0f))
+                    } else {
+                        card.components[TransformComponent::class.java]?.setPosition(
+                            orbitPosition(angle = item.angle, distance = (item.distance - 0.12f).coerceAtLeast(0.58f), y = 1.5f)
+                        )
+                        card.components[TransformComponent::class.java]?.setEulerAngles(faceCenterEuler(item.angle))
+                    }
                     content.addEntity(card)
                 }
                 attachments.entity(id = "close-revision")?.let { close ->
@@ -97,12 +107,12 @@ fun RevisionStage() {
                 }
             },
             attachments = {
-                orbitWords.forEachIndexed { index, orbitWord ->
-                    AttachmentPanel(id = tagId(orbitWord.word.id)) {
+                orbitItems.forEach { item ->
+                    AttachmentPanel(id = tagId(item.orbitWord.word.id)) {
                         OrbitWordTag(
-                            word = orbitWord.word,
-                            distance = orbitDistance(index = index, count = orbitWords.size),
-                            onClick = { selectedId = orbitWord.word.id }
+                            word = item.orbitWord.word,
+                            distance = item.distance,
+                            onClick = { selectedId = item.orbitWord.word.id }
                         )
                     }
                 }
@@ -141,24 +151,24 @@ fun RevisionStage() {
 
 @Composable
 private fun OrbitWordTag(word: VocabWord, distance: Float, onClick: () -> Unit) {
-    val priority = ((1.85f - distance) / 1.0f).coerceIn(0f, 1f)
+    val priority = ((1.35f - distance) / 0.7f).coerceIn(0f, 1f)
     Box(
         modifier = Modifier
-            .size(width = 190.dp, height = 76.dp)
-            .clip(RoundedCornerShape(18.dp))
+            .size(width = 280.dp, height = 112.dp)
+            .clip(RoundedCornerShape(24.dp))
             .clickable(onClick = onClick)
     ) {
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .clip(RoundedCornerShape(18.dp))
+                .clip(RoundedCornerShape(24.dp))
                 .background(Color(0xFFE6F0FF).copy(alpha = 0.42f + priority * 0.34f)),
             contentAlignment = Alignment.Center
         ) {
             Text(
                 text = word.word,
                 color = Color(0xFF263344),
-                fontSize = 22.sp,
+                fontSize = 32.sp,
                 fontWeight = FontWeight.Bold,
                 textAlign = TextAlign.Center
             )
@@ -239,10 +249,17 @@ private data class OrbitWord(
     val progress: WordProgress
 )
 
+private data class OrbitItem(
+    val orbitWord: OrbitWord,
+    val angle: Float,
+    val distance: Float,
+    val position: Vector3
+)
+
 private fun orbitDistance(index: Int, count: Int): Float {
-    if (count <= 1) return 1.1f
+    if (count <= 1) return 0.72f
     val normalized = index.toFloat() / (count - 1).toFloat()
-    return 1.1f + normalized * 1.2f
+    return 0.72f + normalized * 0.58f
 }
 
 private fun orbitAngle(index: Int, count: Int): Float {
@@ -250,6 +267,16 @@ private fun orbitAngle(index: Int, count: Int): Float {
     val step = (2f * PI.toFloat()) / count.toFloat()
     return index * step
 }
+
+private fun orbitPosition(angle: Float, distance: Float, y: Float): Vector3 =
+    Vector3(
+        sin(angle) * distance,
+        y,
+        -cos(angle) * distance
+    )
+
+private fun faceCenterEuler(angle: Float): EulerAngles =
+    EulerAngles(0f, angle * 180f / PI.toFloat() + 180f, 0f)
 
 @Composable
 private fun HiddenPanel() {
