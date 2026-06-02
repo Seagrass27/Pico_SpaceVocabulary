@@ -77,75 +77,87 @@ fun RevisionStage() {
         Unit
     }
 
-    key(version) {
-        SpatialView(
-            initial = { content, attachments ->
-                orbitItems.forEach { item ->
-                    val word = item.orbitWord.word
-                    attachments.entity(id = tagId(word.id))?.let { attachment ->
-                        attachment.components[TransformComponent::class.java]?.setPosition(item.position)
-                        attachment.components[TransformComponent::class.java]?.setEulerAngles(faceCenterEuler(item.angle))
-                        content.addEntity(attachment)
-                    }
-                }
-                attachments.entity(id = "selected-card")?.let { card ->
-                    val item = selectedItem
-                    if (item == null) {
-                        card.components[TransformComponent::class.java]?.setPosition(Vector3(0f, 1.55f, -0.86f))
-                        card.components[TransformComponent::class.java]?.setEulerAngles(EulerAngles(0f, 0f, 0f))
-                    } else {
-                        card.components[TransformComponent::class.java]?.setPosition(
-                            orbitPosition(angle = item.angle, distance = (item.distance - 0.12f).coerceAtLeast(0.58f), y = 1.5f)
-                        )
-                        card.components[TransformComponent::class.java]?.setEulerAngles(faceCenterEuler(item.angle))
-                    }
-                    content.addEntity(card)
-                }
-                attachments.entity(id = "close-revision")?.let { close ->
-                    close.components[TransformComponent::class.java]?.setPosition(Vector3(0.78f, 2.05f, -0.9f))
-                    content.addEntity(close)
-                }
-            },
-            attachments = {
-                orbitItems.forEach { item ->
-                    AttachmentPanel(id = tagId(item.orbitWord.word.id)) {
-                        OrbitWordTag(
-                            word = item.orbitWord.word,
-                            distance = item.distance,
-                            onClick = { selectedId = item.orbitWord.word.id }
-                        )
-                    }
-                }
-                AttachmentPanel(id = "close-revision") {
-                    StageActionButton(
-                        onClick = closeRevision,
-                        modifier = Modifier.size(width = 132.dp, height = 54.dp),
-                        label = "Close"
-                    )
-                }
-                AttachmentPanel(id = "selected-card") {
-                    if (selectedWord == null) {
-                        if (orbitWords.isEmpty()) {
-                            EmptyRevisionCard(onClose = closeRevision)
-                        } else {
-                            HiddenPanel()
+    Box(Modifier.fillMaxSize()) {
+        key(version) {
+            SpatialView(
+                modifier = Modifier.fillMaxSize(),
+                initial = { content, attachments ->
+                    orbitItems.forEach { item ->
+                        val word = item.orbitWord.word
+                        attachments.entity(id = tagId(word.id))?.let { attachment ->
+                            attachment.components[TransformComponent::class.java]?.setPosition(item.position)
+                            attachment.components[TransformComponent::class.java]?.setEulerAngles(faceCenterEuler(item.angle))
+                            content.addEntity(attachment)
                         }
-                    } else {
-                        RevisionWordCard(
-                            word = selectedWord,
-                            onClose = closeRevision,
-                            onRemembered = {
-                                SpaceWordsStore.markRemembered(selectedWord.id)
-                                selectedId = SpaceWordsStore.revisionWords().firstOrNull()?.wordId
-                            },
-                            onKeep = {
-                                SpaceWordsStore.putInRevision(selectedWord.id)
-                            }
+                    }
+                    attachments.entity(id = "close-revision")?.let { close ->
+                        close.components[TransformComponent::class.java]?.setPosition(Vector3(0.78f, 2.05f, -0.9f))
+                        content.addEntity(close)
+                    }
+                },
+                attachments = {
+                    orbitItems.forEach { item ->
+                        AttachmentPanel(id = tagId(item.orbitWord.word.id)) {
+                            OrbitWordTag(
+                                word = item.orbitWord.word,
+                                distance = item.distance,
+                                onClick = { selectedId = item.orbitWord.word.id }
+                            )
+                        }
+                    }
+                    AttachmentPanel(id = "close-revision") {
+                        StageActionButton(
+                            onClick = closeRevision,
+                            modifier = Modifier.size(width = 132.dp, height = 54.dp),
+                            label = "Close"
                         )
                     }
                 }
-            }
-        )
+            )
+        }
+        key(version, selectedId) {
+            SpatialView(
+                modifier = Modifier.fillMaxSize(),
+                initial = { content, attachments ->
+                    attachments.entity(id = "selected-card")?.let { card ->
+                        val item = selectedItem
+                        if (item == null) {
+                            card.components[TransformComponent::class.java]?.setPosition(Vector3(0f, 1.55f, -0.86f))
+                            card.components[TransformComponent::class.java]?.setEulerAngles(EulerAngles(0f, 0f, 0f))
+                        } else {
+                            card.components[TransformComponent::class.java]?.setPosition(
+                                orbitPosition(angle = item.angle, distance = (item.distance - 0.12f).coerceAtLeast(0.58f), y = 1.5f)
+                            )
+                            card.components[TransformComponent::class.java]?.setEulerAngles(faceCenterEuler(item.angle))
+                        }
+                        content.addEntity(card)
+                    }
+                },
+                attachments = {
+                    AttachmentPanel(id = "selected-card") {
+                        if (selectedWord == null) {
+                            if (orbitWords.isEmpty()) {
+                                EmptyRevisionCard(onClose = closeRevision)
+                            } else {
+                                HiddenPanel()
+                            }
+                        } else {
+                            RevisionWordCard(
+                                word = selectedWord,
+                                onClose = closeRevision,
+                                onRemembered = {
+                                    SpaceWordsStore.markRemembered(selectedWord.id)
+                                    selectedId = SpaceWordsStore.revisionWords().firstOrNull()?.wordId
+                                },
+                                onKeep = {
+                                    SpaceWordsStore.putInRevision(selectedWord.id)
+                                }
+                            )
+                        }
+                    }
+                }
+            )
+        }
     }
 }
 
