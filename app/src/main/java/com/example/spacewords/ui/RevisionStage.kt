@@ -288,7 +288,10 @@ private fun orbitPosition(angle: Float, distance: Float, y: Float): Vector3 =
     )
 
 private fun faceCenterEuler(angle: Float): EulerAngles =
-    EulerAngles(0f, angle * 180f / PI.toFloat() + 180f, 0f)
+    EulerAngles(0f, normalizeDegrees(360f - angle * 180f / PI.toFloat()), 0f)
+
+private fun normalizeDegrees(degrees: Float): Float =
+    ((degrees % 360f) + 360f) % 360f
 
 @Composable
 private fun HiddenPanel() {
