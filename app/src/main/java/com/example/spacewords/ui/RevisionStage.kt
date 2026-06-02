@@ -1,5 +1,6 @@
 package com.example.spacewords.ui
 
+import android.os.SystemClock
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -13,6 +14,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
@@ -33,6 +35,10 @@ import com.example.spacewords.data.SpaceWordsStore
 import com.example.spacewords.data.WordProgress
 import com.example.spacewords.model.VocabWord
 import com.example.spacewords.model.findWord
+import com.pico.spatial.core.ecs.Component
+import com.pico.spatial.core.ecs.EntityQueryCondition
+import com.pico.spatial.core.ecs.SceneUpdateContext
+import com.pico.spatial.core.ecs.System as SpatialSystem
 import com.pico.spatial.core.ecs.TransformComponent
 import com.pico.spatial.core.math.EulerAngles
 import com.pico.spatial.core.math.Vector3
@@ -50,7 +56,7 @@ import kotlin.math.sin
 fun RevisionStage() {
     SpaceWordsStore.ensureLoaded(LocalContext.current)
     val version by SpaceWordsStore.version
-    val revision = SpaceWordsStore.revisionWords()
+    val revision = remember { SpaceWordsStore.revisionWords() }
     val orbitWords = revision.mapNotNull { progress ->
         findWord(progress.wordId)?.let { OrbitWord(it, progress) }
     }
@@ -64,7 +70,7 @@ fun RevisionStage() {
             position = orbitPosition(angle = angle, distance = distance, y = 1.42f)
         )
     }
-    var selectedId by remember(version) { mutableStateOf<String?>(null) }
+    var selectedId by remember { mutableStateOf<String?>(null) }
     val selectedItem = selectedId?.let { id -> orbitItems.firstOrNull { it.orbitWord.word.id == id } }
     val selectedWord = selectedItem?.orbitWord?.word
     val spatialNavigator = LocalSpatialNavigator.current
@@ -77,14 +83,31 @@ fun RevisionStage() {
         Unit
     }
 
+    DisposableEffect(Unit) {
+        RevisionOrbitMotion.reset()
+        SpatialSystem.register(RevisionOrbitSystem::class.java)
+        onDispose {
+            SpatialSystem.unregister(RevisionOrbitSystem::class.java)
+            RevisionOrbitMotion.reset()
+        }
+    }
+
     Box(Modifier.fillMaxSize()) {
-        key(version) {
+        key(Unit) {
             SpatialView(
                 modifier = Modifier.fillMaxSize(),
                 initial = { content, attachments ->
                     orbitItems.forEach { item ->
                         val word = item.orbitWord.word
                         attachments.entity(id = tagId(word.id))?.let { attachment ->
+                            attachment.components.set(
+                                RevisionOrbitComponent(
+                                    wordId = word.id,
+                                    baseAngle = item.angle,
+                                    distance = item.distance,
+                                    y = 1.42f
+                                )
+                            )
                             attachment.components[TransformComponent::class.java]?.setPosition(item.position)
                             attachment.components[TransformComponent::class.java]?.setEulerAngles(faceCenterEuler(item.angle))
                             content.addEntity(attachment)
@@ -101,7 +124,10 @@ fun RevisionStage() {
                             OrbitWordTag(
                                 word = item.orbitWord.word,
                                 distance = item.distance,
-                                onClick = { selectedId = item.orbitWord.word.id }
+                                onClick = {
+                                    RevisionOrbitMotion.pause()
+                                    selectedId = item.orbitWord.word.id
+                                }
                             )
                         }
                     }
@@ -125,10 +151,11 @@ fun RevisionStage() {
                             card.components[TransformComponent::class.java]?.setPosition(Vector3(0f, 1.55f, -0.86f))
                             card.components[TransformComponent::class.java]?.setEulerAngles(EulerAngles(0f, 0f, 0f))
                         } else {
+                            val angle = animatedOrbitAngle(item, RevisionOrbitMotion.currentOffsetDeg())
                             card.components[TransformComponent::class.java]?.setPosition(
-                                orbitPosition(angle = item.angle, distance = (item.distance - 0.12f).coerceAtLeast(0.58f), y = 1.5f)
+                                orbitPosition(angle = angle, distance = (item.distance - 0.12f).coerceAtLeast(0.58f), y = 1.5f)
                             )
-                            card.components[TransformComponent::class.java]?.setEulerAngles(faceCenterEuler(item.angle))
+                            card.components[TransformComponent::class.java]?.setEulerAngles(faceCenterEuler(angle))
                         }
                         content.addEntity(card)
                     }
@@ -146,11 +173,14 @@ fun RevisionStage() {
                                 word = selectedWord,
                                 onClose = closeRevision,
                                 onRemembered = {
+                                    RevisionOrbitMotion.hideWord(selectedWord.id)
+                                    selectedId = null
                                     SpaceWordsStore.markRemembered(selectedWord.id)
-                                    selectedId = SpaceWordsStore.revisionWords().firstOrNull()?.wordId
+                                    RevisionOrbitMotion.resume()
                                 },
                                 onKeep = {
-                                    SpaceWordsStore.putInRevision(selectedWord.id)
+                                    selectedId = null
+                                    RevisionOrbitMotion.resume()
                                 }
                             )
                         }
@@ -290,8 +320,80 @@ private fun orbitPosition(angle: Float, distance: Float, y: Float): Vector3 =
 private fun faceCenterEuler(angle: Float): EulerAngles =
     EulerAngles(0f, normalizeDegrees(360f - angle * 180f / PI.toFloat()), 0f)
 
+private fun animatedOrbitAngle(item: OrbitItem, orbitOffsetDeg: Float): Float =
+    item.angle + orbitOffsetDeg * PI.toFloat() / 180f
+
 private fun normalizeDegrees(degrees: Float): Float =
     ((degrees % 360f) + 360f) % 360f
+
+private const val OrbitAngularSpeedDegPerSecond = 6f
+
+class RevisionOrbitComponent(
+    var wordId: String = "",
+    var baseAngle: Float = 0f,
+    var distance: Float = 0f,
+    var y: Float = 1.42f
+) : Component()
+
+class RevisionOrbitSystem : SpatialSystem() {
+    override fun update(context: SceneUpdateContext) {
+        val orbitOffsetDeg = RevisionOrbitMotion.currentOffsetDeg()
+        val condition = EntityQueryCondition.hasComponent(RevisionOrbitComponent::class.java)
+        context.scene.queryEntity(condition).forEach { entity ->
+            val orbit = entity.components[RevisionOrbitComponent::class.java] ?: return@forEach
+            val shouldShow = !RevisionOrbitMotion.isHidden(orbit.wordId)
+            if (entity.enabled != shouldShow) {
+                entity.enabled = shouldShow
+            }
+            if (!shouldShow) return@forEach
+            val angle = orbit.baseAngle + orbitOffsetDeg * PI.toFloat() / 180f
+            entity.components[TransformComponent::class.java]?.apply {
+                setPosition(orbitPosition(angle = angle, distance = orbit.distance, y = orbit.y))
+                setEulerAngles(faceCenterEuler(angle))
+            }
+        }
+    }
+}
+
+private object RevisionOrbitMotion {
+    private var baseOffsetDeg = 0f
+    private var runningSinceMs = SystemClock.elapsedRealtime()
+    private var paused = false
+    private val hiddenWordIds = mutableSetOf<String>()
+
+    fun reset() {
+        baseOffsetDeg = 0f
+        runningSinceMs = SystemClock.elapsedRealtime()
+        paused = false
+        hiddenWordIds.clear()
+    }
+
+    fun currentOffsetDeg(): Float {
+        if (paused) return baseOffsetDeg
+        val elapsedSeconds = (SystemClock.elapsedRealtime() - runningSinceMs) / 1000f
+        return normalizeDegrees(baseOffsetDeg - OrbitAngularSpeedDegPerSecond * elapsedSeconds)
+    }
+
+    fun pause() {
+        if (!paused) {
+            baseOffsetDeg = currentOffsetDeg()
+            paused = true
+        }
+    }
+
+    fun resume() {
+        if (paused) {
+            runningSinceMs = SystemClock.elapsedRealtime()
+            paused = false
+        }
+    }
+
+    fun hideWord(wordId: String) {
+        hiddenWordIds.add(wordId)
+    }
+
+    fun isHidden(wordId: String): Boolean = hiddenWordIds.contains(wordId)
+}
 
 @Composable
 private fun HiddenPanel() {
