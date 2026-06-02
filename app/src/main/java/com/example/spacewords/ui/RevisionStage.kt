@@ -79,6 +79,11 @@ fun RevisionStage() {
 
     key(version) {
         SpatialView(
+            update = { _, attachments ->
+                attachments.entity(id = "selected-card")?.let { card ->
+                    positionSelectedCard(card, selectedItem)
+                }
+            },
             initial = { content, attachments ->
                 orbitItems.forEach { item ->
                     val word = item.orbitWord.word
@@ -89,16 +94,7 @@ fun RevisionStage() {
                     }
                 }
                 attachments.entity(id = "selected-card")?.let { card ->
-                    val item = selectedItem
-                    if (item == null) {
-                        card.components[TransformComponent::class.java]?.setPosition(Vector3(0f, 1.55f, -0.86f))
-                        card.components[TransformComponent::class.java]?.setEulerAngles(EulerAngles(0f, 0f, 0f))
-                    } else {
-                        card.components[TransformComponent::class.java]?.setPosition(
-                            orbitPosition(angle = item.angle, distance = (item.distance - 0.12f).coerceAtLeast(0.58f), y = 1.5f)
-                        )
-                        card.components[TransformComponent::class.java]?.setEulerAngles(faceCenterEuler(item.angle))
-                    }
+                    positionSelectedCard(card, selectedItem)
                     content.addEntity(card)
                 }
                 attachments.entity(id = "close-revision")?.let { close ->
@@ -276,7 +272,23 @@ private fun orbitPosition(angle: Float, distance: Float, y: Float): Vector3 =
     )
 
 private fun faceCenterEuler(angle: Float): EulerAngles =
-    EulerAngles(0f, angle * 180f / PI.toFloat() + 180f, 0f)
+    EulerAngles(0f, angle * 180f / PI.toFloat(), 0f)
+
+private fun positionSelectedCard(card: com.pico.spatial.core.ecs.Entity, item: OrbitItem?) {
+    if (item == null) {
+        card.components[TransformComponent::class.java]?.setPosition(Vector3(0f, 1.55f, -0.86f))
+        card.components[TransformComponent::class.java]?.setEulerAngles(EulerAngles(0f, 0f, 0f))
+    } else {
+        card.components[TransformComponent::class.java]?.setPosition(
+            orbitPosition(
+                angle = item.angle,
+                distance = (item.distance - 0.12f).coerceAtLeast(0.58f),
+                y = 1.5f
+            )
+        )
+        card.components[TransformComponent::class.java]?.setEulerAngles(faceCenterEuler(item.angle))
+    }
+}
 
 @Composable
 private fun HiddenPanel() {
