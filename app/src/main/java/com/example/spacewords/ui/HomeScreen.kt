@@ -1,5 +1,6 @@
 package com.example.spacewords.ui
 
+import androidx.compose.foundation.Image
 import android.os.Bundle
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -11,6 +12,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -22,10 +24,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.spacewords.R
 import com.example.spacewords.HomeWindowId
 import com.example.spacewords.LearningWindowId
 import com.example.spacewords.LearningWindowTag
@@ -152,49 +157,87 @@ private fun TopicGrid(topics: List<Topic>, onTopicSelected: (Topic) -> Unit) {
 
 @Composable
 private fun TopicTile(modifier: Modifier, topic: Topic, onClick: () -> Unit) {
+    val shape = RoundedCornerShape(22.dp)
     Box(
         modifier = modifier
             .height(124.dp)
-            .clip(RoundedCornerShape(22.dp))
+            .clip(shape)
             .clickable(onClick = onClick)
     ) {
+        Image(
+            painter = painterResource(id = topicImageRes(topic.id)),
+            contentDescription = null,
+            modifier = Modifier.fillMaxSize(),
+            contentScale = ContentScale.Crop
+        )
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .clip(RoundedCornerShape(22.dp))
                 .background(
-                    Brush.horizontalGradient(
+                    Brush.verticalGradient(
                         listOf(
-                            topic.tint.copy(alpha = 0.55f),
-                            Color.White.copy(alpha = 0.30f)
+                            Color.Transparent,
+                            Color.Transparent,
+                            Color.Black.copy(alpha = 0.34f)
                         )
                     )
                 )
-                .padding(18.dp)
+                .padding(horizontal = 18.dp, vertical = 14.dp)
         ) {
-            Box(
-                modifier = Modifier
-                    .size(78.dp)
-                    .align(Alignment.CenterStart)
-                    .clip(RoundedCornerShape(39.dp))
-                    .background(topic.tint.copy(alpha = 0.38f))
-            )
-            Column(Modifier.align(Alignment.Center)) {
-                Text(
+            Column(
+                modifier = Modifier.align(Alignment.BottomStart)
+            ) {
+                ShadowedText(
                     text = topic.title,
-                    color = Color.White,
-                    fontSize = 27.sp,
-                    fontWeight = FontWeight.Bold
+                    color = Color.White.copy(alpha = 0.76f),
+                    fontSize = 23,
+                    fontWeight = FontWeight.SemiBold
                 )
-                Text(
+                ShadowedText(
                     text = "${topic.words.size} words",
-                    color = Color.White.copy(alpha = 0.74f),
-                    fontSize = 13.sp
+                    color = Color.White.copy(alpha = 0.72f),
+                    fontSize = 12,
+                    fontWeight = FontWeight.Medium
                 )
             }
         }
     }
 }
+
+@Composable
+private fun ShadowedText(
+    text: String,
+    color: Color,
+    fontSize: Int,
+    fontWeight: FontWeight
+) {
+    Box {
+        Text(
+            text = text,
+            color = Color.Black.copy(alpha = 0.22f),
+            fontSize = fontSize.sp,
+            fontWeight = fontWeight,
+            modifier = Modifier.offset(x = 1.dp, y = 1.dp)
+        )
+        Text(
+            text = text,
+            color = color,
+            fontSize = fontSize.sp,
+            fontWeight = fontWeight
+        )
+    }
+}
+
+private fun topicImageRes(topicId: String): Int =
+    when (topicId) {
+        "food" -> R.drawable.topic_food
+        "travel" -> R.drawable.topic_travel
+        "office" -> R.drawable.topic_office
+        "interview" -> R.drawable.topic_interview
+        "workout" -> R.drawable.topic_workout
+        "education" -> R.drawable.topic_education
+        else -> R.drawable.topic_food
+    }
 
 @Composable
 private fun WideActionPanel(
