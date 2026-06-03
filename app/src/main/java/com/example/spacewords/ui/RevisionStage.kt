@@ -2,6 +2,7 @@ package com.example.spacewords.ui
 
 import android.os.SystemClock
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -24,6 +25,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -194,22 +196,46 @@ fun RevisionStage() {
 @Composable
 private fun OrbitWordTag(word: VocabWord, distance: Float, onClick: () -> Unit) {
     val priority = ((1.35f - distance) / 0.7f).coerceIn(0f, 1f)
+    val shape = RoundedCornerShape(24.dp)
+    val accentColor = revisionUrgencyColor(priority)
+    val borderColor = accentColor.copy(alpha = 0.36f + priority * 0.42f)
     Box(
         modifier = Modifier
             .size(width = 280.dp, height = 112.dp)
-            .clip(RoundedCornerShape(24.dp))
-            .clickable(onClick = onClick)
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center
     ) {
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .clip(RoundedCornerShape(24.dp))
-                .background(Color(0xFFE6F0FF).copy(alpha = 0.42f + priority * 0.34f)),
+                .padding((7 - priority * 5).dp)
+                .shadow(
+                    elevation = (4 + priority * 18).dp,
+                    shape = shape,
+                    ambientColor = accentColor.copy(alpha = 0.20f + priority * 0.42f),
+                    spotColor = accentColor.copy(alpha = 0.18f + priority * 0.38f)
+                )
+                .clip(shape)
+                .background(accentColor.copy(alpha = 0.10f + priority * 0.18f))
+        )
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(4.dp)
+                .shadow(
+                    elevation = (2 + priority * 8).dp,
+                    shape = shape,
+                    ambientColor = Color.White.copy(alpha = 0.18f + priority * 0.32f),
+                    spotColor = accentColor.copy(alpha = 0.16f + priority * 0.26f)
+                )
+                .clip(shape)
+                .background(Color(0xFFEAF4FF).copy(alpha = 0.38f + priority * 0.34f))
+                .border(width = (1 + priority).dp, color = borderColor, shape = shape),
             contentAlignment = Alignment.Center
         ) {
             Text(
                 text = word.word,
-                color = Color(0xFF263344),
+                color = Color(0xFF263344).copy(alpha = 0.76f + priority * 0.24f),
                 fontSize = 32.sp,
                 fontWeight = FontWeight.Bold,
                 textAlign = TextAlign.Center
@@ -217,6 +243,13 @@ private fun OrbitWordTag(word: VocabWord, distance: Float, onClick: () -> Unit) 
         }
     }
 }
+
+private fun revisionUrgencyColor(priority: Float): Color =
+    when {
+        priority > 0.66f -> Color(0xFFFF8A7A)
+        priority > 0.33f -> Color(0xFFFFD88A)
+        else -> Color(0xFF8FD7FF)
+    }
 
 @Composable
 private fun RevisionWordCard(
