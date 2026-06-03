@@ -5,6 +5,7 @@ import android.os.Bundle
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -160,7 +161,7 @@ private fun TopicTile(modifier: Modifier, topic: Topic, onClick: () -> Unit) {
     val shape = RoundedCornerShape(22.dp)
     Box(
         modifier = modifier
-            .height(124.dp)
+            .aspectRatio(16f / 9f)
             .clip(shape)
             .clickable(onClick = onClick)
     ) {
