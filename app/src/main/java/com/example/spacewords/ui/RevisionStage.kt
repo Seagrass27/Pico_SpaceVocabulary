@@ -105,7 +105,7 @@ fun RevisionStage() {
                                     wordId = word.id,
                                     baseAngle = item.angle,
                                     distance = item.distance,
-                                    y = 1.42f
+                                    y = 1.42f + stableYOffset(word.id)
                                 )
                             )
                             attachment.components[TransformComponent::class.java]?.setPosition(item.position)
@@ -393,6 +393,11 @@ private object RevisionOrbitMotion {
     }
 
     fun isHidden(wordId: String): Boolean = hiddenWordIds.contains(wordId)
+}
+
+private fun stableYOffset(wordId: String): Float {
+    val normalized = (wordId.hashCode() and 0xFFFF) / 65535f
+    return (normalized - 0.5f) * 0.08f
 }
 
 @Composable
