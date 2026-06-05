@@ -46,6 +46,7 @@ import com.pico.spatial.core.math.EulerAngles
 import com.pico.spatial.core.math.Vector3
 import com.pico.spatial.ui.design.Text
 import com.pico.spatial.ui.foundation.content.SpatialView
+import com.pico.spatial.ui.foundation.hover.spatialHoverEffect
 import com.pico.spatial.ui.foundation.material.backgroundMaterial
 import com.pico.spatial.ui.platform.Material
 import com.pico.spatial.ui.platform.containers.LocalSpatialNavigator
@@ -202,7 +203,8 @@ private fun OrbitWordTag(word: VocabWord, distance: Float, onClick: () -> Unit) 
     Box(
         modifier = Modifier
             .size(width = 280.dp, height = 112.dp)
-            .clickable(onClick = onClick),
+            .clickable(onClick = onClick)
+            .spatialHoverEffect(),
         contentAlignment = Alignment.Center
     ) {
         Box(
@@ -444,7 +446,8 @@ private fun StageActionButton(onClick: () -> Unit, modifier: Modifier, label: St
         modifier = modifier
             .clip(RoundedCornerShape(18.dp))
             .background(Color.White.copy(alpha = 0.36f))
-            .clickable(onClick = onClick),
+            .clickable(onClick = onClick)
+            .spatialHoverEffect(),
         contentAlignment = Alignment.Center
     ) {
         Text(text = label, color = Color(0xFF263344), fontSize = 16.sp, fontWeight = FontWeight.Bold)

@@ -34,6 +34,7 @@ import com.example.spacewords.model.Topic
 import com.example.spacewords.model.VocabWord
 import com.example.spacewords.model.findTopic
 import com.pico.spatial.ui.design.Text
+import com.pico.spatial.ui.foundation.hover.spatialHoverEffect
 import com.pico.spatial.ui.foundation.material.backgroundMaterial
 import com.pico.spatial.ui.platform.Material
 import com.pico.spatial.ui.platform.containers.LocalSpatialNavigator
@@ -204,7 +205,8 @@ private fun ActionButton(onClick: () -> Unit, modifier: Modifier = Modifier, lab
         modifier = modifier
             .clip(RoundedCornerShape(18.dp))
             .background(Color.White.copy(alpha = 0.36f))
-            .clickable(onClick = onClick),
+            .clickable(onClick = onClick)
+            .spatialHoverEffect(),
         contentAlignment = Alignment.Center
     ) {
         Text(text = label, color = Color(0xFF263344), fontSize = 17.sp, fontWeight = FontWeight.Bold)

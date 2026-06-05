@@ -41,6 +41,7 @@ import com.example.spacewords.data.SpaceWordsStore
 import com.example.spacewords.model.Topic
 import com.example.spacewords.model.Topics
 import com.pico.spatial.ui.design.Text
+import com.pico.spatial.ui.foundation.hover.spatialHoverEffect
 import com.pico.spatial.ui.foundation.material.backgroundMaterial
 import com.pico.spatial.ui.platform.Material
 import com.pico.spatial.ui.platform.containers.LocalSpatialNavigator
@@ -164,6 +165,7 @@ private fun TopicTile(modifier: Modifier, topic: Topic, onClick: () -> Unit) {
             .aspectRatio(16f / 9f)
             .clip(shape)
             .clickable(onClick = onClick)
+            .spatialHoverEffect()
     ) {
         Image(
             painter = painterResource(id = topicImageRes(topic.id)),
@@ -253,7 +255,7 @@ private fun WideActionPanel(
         modifier = modifier
             .height(120.dp)
             .clip(RoundedCornerShape(24.dp))
-            .then(if (enabled) Modifier.clickable(onClick = onClick) else Modifier)
+            .then(if (enabled) Modifier.clickable(onClick = onClick).spatialHoverEffect() else Modifier)
     ) {
         Row(
             modifier = Modifier
