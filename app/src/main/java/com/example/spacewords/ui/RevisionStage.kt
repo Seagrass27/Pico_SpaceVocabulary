@@ -4,6 +4,10 @@ import android.os.SystemClock
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -27,6 +31,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -46,6 +51,8 @@ import com.pico.spatial.core.math.EulerAngles
 import com.pico.spatial.core.math.Vector3
 import com.pico.spatial.ui.design.Text
 import com.pico.spatial.ui.foundation.content.SpatialView
+import com.pico.spatial.ui.foundation.gesture.detectSpatialDragGesture
+import com.pico.spatial.ui.foundation.gesture.detectSpatialPointerEvent
 import com.pico.spatial.ui.foundation.hover.spatialHoverEffect
 import com.pico.spatial.ui.foundation.material.backgroundMaterial
 import com.pico.spatial.ui.platform.Material
@@ -57,7 +64,8 @@ import kotlin.math.sin
 
 @Composable
 fun RevisionStage() {
-    SpaceWordsStore.ensureLoaded(LocalContext.current)
+    val context = LocalContext.current
+    SpaceWordsStore.ensureLoaded(context)
     val version by SpaceWordsStore.version
     val revision = remember { SpaceWordsStore.revisionWords() }
     val orbitWords = revision.mapNotNull { progress ->
@@ -95,7 +103,10 @@ fun RevisionStage() {
         }
     }
 
-    Box(Modifier.fillMaxSize()) {
+    Box(
+        Modifier
+            .fillMaxSize()
+    ) {
         key(Unit) {
             SpatialView(
                 modifier = Modifier.fillMaxSize(),
@@ -196,6 +207,7 @@ fun RevisionStage() {
 
 @Composable
 private fun OrbitWordTag(word: VocabWord, distance: Float, onClick: () -> Unit) {
+    val context = LocalContext.current
     val priority = ((1.35f - distance) / 0.7f).coerceIn(0f, 1f)
     val shape = RoundedCornerShape(24.dp)
     val accentColor = revisionUrgencyColor(priority)
@@ -203,7 +215,53 @@ private fun OrbitWordTag(word: VocabWord, distance: Float, onClick: () -> Unit) 
     Box(
         modifier = Modifier
             .size(width = 280.dp, height = 112.dp)
-            .clickable(onClick = onClick)
+            .pointerInput(word.id) {
+                awaitEachGesture {
+                    awaitFirstDown(requireUnconsumed = false)
+                    RevisionOrbitMotion.startDrag()
+                    waitForUpOrCancellation()
+                    RevisionOrbitMotion.finishPress()
+                }
+            }
+            .pointerInput(word.id) {
+                detectDragGestures(
+                    onDragStart = { RevisionOrbitMotion.startDrag() },
+                    onDragEnd = { RevisionOrbitMotion.finishDrag() },
+                    onDragCancel = { RevisionOrbitMotion.finishDrag() },
+                    onDrag = { change, dragAmount ->
+                        change.consume()
+                        RevisionOrbitMotion.dragBy(dragAmount.x)
+                    }
+                )
+            }
+            .pointerInput(word.id, context) {
+                var pointerPressed = false
+                detectSpatialPointerEvent(context = context) { eventList ->
+                    val isPressed = eventList.any { it.pressed }
+                    if (isPressed && !pointerPressed) {
+                        RevisionOrbitMotion.startDrag()
+                    } else if (!isPressed && pointerPressed) {
+                        RevisionOrbitMotion.requestPressRelease()
+                    }
+                    pointerPressed = isPressed
+                    false
+                }
+            }
+            .pointerInput(word.id, context) {
+                detectSpatialDragGesture(
+                    context = context,
+                    onDragStart = { RevisionOrbitMotion.startDrag() },
+                    onDragEnd = { RevisionOrbitMotion.finishDrag() },
+                    onDragCancel = { RevisionOrbitMotion.finishDrag() }
+                ) { dragValue ->
+                    RevisionOrbitMotion.dragBy(dragValue.dragAmount.x)
+                }
+            }
+            .clickable {
+                if (RevisionOrbitMotion.shouldOpenCardOnClick()) {
+                    onClick()
+                }
+            }
             .spatialHoverEffect(),
         contentAlignment = Alignment.Center
     ) {
@@ -361,7 +419,23 @@ private fun animatedOrbitAngle(item: OrbitItem, orbitOffsetDeg: Float): Float =
 private fun normalizeDegrees(degrees: Float): Float =
     ((degrees % 360f) + 360f) % 360f
 
+private fun shortestDegreeDelta(from: Float, to: Float): Float =
+    ((to - from + 540f) % 360f) - 180f
+
 private const val OrbitAngularSpeedDegPerSecond = 6f
+private const val DragActivationPx = 5f
+private const val PreDragNoiseDeadZonePx = 0.35f
+private const val ActiveDragDeadZonePx = 0.18f
+private const val DragDegreesPerPixel = 0.055f
+private const val DragVelocityDegreesPerSecondPerPixel = 1.25f
+private const val MaxUserOrbitVelocityDegPerSecond = 66f
+private const val UserOrbitVelocityDecayPerSecond = 0.38f
+private const val DragVelocityIdleTimeoutMs = 140L
+private const val TapMaxDurationMs = 320L
+private const val FlingMinVelocityDegPerSecond = 18f
+private const val DragDeltaSmoothing = 0.35f
+private const val SpatialPressReleaseDebounceMs = 90L
+private const val DragFollowRatePerSecond = 18f
 
 class RevisionOrbitComponent(
     var wordId: String = "",
@@ -393,25 +467,162 @@ class RevisionOrbitSystem : SpatialSystem() {
 private object RevisionOrbitMotion {
     private var baseOffsetDeg = 0f
     private var runningSinceMs = SystemClock.elapsedRealtime()
+    private var lastMotionMs = runningSinceMs
+    private var userVelocityDegPerSecond = 0f
+    private var userDragging = false
+    private var dragActivated = false
+    private var pendingDragPx = 0f
+    private var smoothedDragDeltaPx = 0f
+    private var dragTargetOffsetDeg = 0f
+    private var lastDragInputMs = runningSinceMs
+    private var holdStartMs = runningSinceMs
+    private var pendingPressReleaseMs: Long? = null
+    private var tapAllowed = false
     private var paused = false
     private val hiddenWordIds = mutableSetOf<String>()
 
     fun reset() {
         baseOffsetDeg = 0f
         runningSinceMs = SystemClock.elapsedRealtime()
+        lastMotionMs = runningSinceMs
+        userVelocityDegPerSecond = 0f
+        userDragging = false
+        dragActivated = false
+        pendingDragPx = 0f
+        smoothedDragDeltaPx = 0f
+        dragTargetOffsetDeg = 0f
+        lastDragInputMs = runningSinceMs
+        holdStartMs = runningSinceMs
+        pendingPressReleaseMs = null
+        tapAllowed = false
         paused = false
         hiddenWordIds.clear()
     }
 
     fun currentOffsetDeg(): Float {
-        if (paused) return baseOffsetDeg
-        val elapsedSeconds = (SystemClock.elapsedRealtime() - runningSinceMs) / 1000f
-        return normalizeDegrees(baseOffsetDeg - OrbitAngularSpeedDegPerSecond * elapsedSeconds)
+        updateMotion()
+        return baseOffsetDeg
+    }
+
+    fun startDrag() {
+        if (paused) return
+        if (userDragging) return
+        baseOffsetDeg = currentOffsetDeg()
+        val now = SystemClock.elapsedRealtime()
+        userVelocityDegPerSecond = 0f
+        userDragging = true
+        dragActivated = false
+        pendingDragPx = 0f
+        smoothedDragDeltaPx = 0f
+        dragTargetOffsetDeg = baseOffsetDeg
+        holdStartMs = now
+        lastDragInputMs = now
+        lastMotionMs = now
+        pendingPressReleaseMs = null
+        tapAllowed = false
+    }
+
+    fun dragBy(deltaX: Float) {
+        if (paused) return
+        if (!userDragging) startDrag()
+        val now = SystemClock.elapsedRealtime()
+        pendingPressReleaseMs = null
+        var effectiveDelta = deltaX
+        if (!dragActivated) {
+            if (kotlin.math.abs(deltaX) < PreDragNoiseDeadZonePx) {
+                if (now - lastDragInputMs > DragVelocityIdleTimeoutMs) {
+                    pendingDragPx = 0f
+                    userVelocityDegPerSecond = 0f
+                }
+                return
+            }
+            pendingDragPx += deltaX
+            val pendingAbs = kotlin.math.abs(pendingDragPx)
+            if (pendingAbs < DragActivationPx) {
+                userVelocityDegPerSecond = 0f
+                return
+            }
+            effectiveDelta = kotlin.math.sign(pendingDragPx) * (pendingAbs - DragActivationPx)
+            pendingDragPx = 0f
+            dragActivated = true
+        }
+        if (kotlin.math.abs(effectiveDelta) < ActiveDragDeadZonePx) {
+            if (now - lastDragInputMs > DragVelocityIdleTimeoutMs) {
+                userVelocityDegPerSecond = 0f
+            }
+            return
+        }
+        updateMotion()
+        lastDragInputMs = now
+        smoothedDragDeltaPx = if (smoothedDragDeltaPx == 0f) {
+            effectiveDelta
+        } else {
+            smoothedDragDeltaPx * DragDeltaSmoothing + effectiveDelta * (1f - DragDeltaSmoothing)
+        }
+        effectiveDelta = smoothedDragDeltaPx
+        val clampedDelta = effectiveDelta.coerceIn(-58f, 58f)
+        dragTargetOffsetDeg = normalizeDegrees(dragTargetOffsetDeg + clampedDelta * DragDegreesPerPixel)
+        val targetVelocity = (clampedDelta * DragVelocityDegreesPerSecondPerPixel)
+            .coerceIn(-MaxUserOrbitVelocityDegPerSecond, MaxUserOrbitVelocityDegPerSecond)
+        userVelocityDegPerSecond = userVelocityDegPerSecond * 0.55f + targetVelocity * 0.45f
+    }
+
+    fun finishPress() {
+        if (!userDragging || dragActivated) return
+        finishDrag()
+    }
+
+    fun requestPressRelease() {
+        if (!userDragging) return
+        pendingPressReleaseMs = SystemClock.elapsedRealtime()
+    }
+
+    fun finishDrag() {
+        if (!userDragging) return
+        val now = SystemClock.elapsedRealtime()
+        val wasDragActivated = dragActivated
+        if (!wasDragActivated || now - lastDragInputMs > DragVelocityIdleTimeoutMs ||
+            kotlin.math.abs(userVelocityDegPerSecond) < FlingMinVelocityDegPerSecond
+        ) {
+            userVelocityDegPerSecond = 0f
+        }
+        tapAllowed = !wasDragActivated && now - holdStartMs <= TapMaxDurationMs
+        userDragging = false
+        dragActivated = false
+        pendingDragPx = 0f
+        smoothedDragDeltaPx = 0f
+        dragTargetOffsetDeg = baseOffsetDeg
+        pendingPressReleaseMs = null
+        lastMotionMs = now
+    }
+
+    fun shouldOpenCardOnClick(): Boolean {
+        val now = SystemClock.elapsedRealtime()
+        val allowed = tapAllowed ||
+            (userDragging && !dragActivated && now - holdStartMs <= TapMaxDurationMs)
+        tapAllowed = false
+        if (allowed && userDragging && !dragActivated) {
+            userDragging = false
+            pendingDragPx = 0f
+            smoothedDragDeltaPx = 0f
+            dragTargetOffsetDeg = baseOffsetDeg
+            pendingPressReleaseMs = null
+            lastMotionMs = now
+        }
+        return allowed
     }
 
     fun pause() {
         if (!paused) {
             baseOffsetDeg = currentOffsetDeg()
+            userVelocityDegPerSecond = 0f
+            userDragging = false
+            dragActivated = false
+            pendingDragPx = 0f
+            smoothedDragDeltaPx = 0f
+            dragTargetOffsetDeg = baseOffsetDeg
+            pendingPressReleaseMs = null
+            tapAllowed = false
             paused = true
         }
     }
@@ -419,6 +630,7 @@ private object RevisionOrbitMotion {
     fun resume() {
         if (paused) {
             runningSinceMs = SystemClock.elapsedRealtime()
+            lastMotionMs = runningSinceMs
             paused = false
         }
     }
@@ -428,6 +640,51 @@ private object RevisionOrbitMotion {
     }
 
     fun isHidden(wordId: String): Boolean = hiddenWordIds.contains(wordId)
+
+    private fun updateMotion() {
+        val now = SystemClock.elapsedRealtime()
+        if (paused) {
+            lastMotionMs = now
+            return
+        }
+        pendingPressReleaseMs?.let { releaseMs ->
+            if (now - releaseMs >= SpatialPressReleaseDebounceMs) {
+                if (!dragActivated || now - lastDragInputMs >= SpatialPressReleaseDebounceMs) {
+                    finishDrag()
+                } else {
+                    pendingPressReleaseMs = null
+                }
+                return
+            }
+        }
+        if (userDragging) {
+            if (now - lastDragInputMs > DragVelocityIdleTimeoutMs) {
+                userVelocityDegPerSecond = 0f
+            }
+            val elapsedSeconds = (now - lastMotionMs) / 1000f
+            if (elapsedSeconds > 0f && dragActivated) {
+                val delta = shortestDegreeDelta(from = baseOffsetDeg, to = dragTargetOffsetDeg)
+                val followAmount = (elapsedSeconds * DragFollowRatePerSecond).coerceIn(0f, 1f)
+                baseOffsetDeg = normalizeDegrees(baseOffsetDeg + delta * followAmount)
+            }
+            lastMotionMs = now
+            return
+        }
+        val elapsedSeconds = (now - lastMotionMs) / 1000f
+        if (elapsedSeconds <= 0f) return
+        baseOffsetDeg = normalizeDegrees(
+            baseOffsetDeg - OrbitAngularSpeedDegPerSecond * elapsedSeconds +
+                userVelocityDegPerSecond * elapsedSeconds
+        )
+        userVelocityDegPerSecond *= Math.pow(
+            UserOrbitVelocityDecayPerSecond.toDouble(),
+            elapsedSeconds.toDouble()
+        ).toFloat()
+        if (kotlin.math.abs(userVelocityDegPerSecond) < 0.2f) {
+            userVelocityDegPerSecond = 0f
+        }
+        lastMotionMs = now
+    }
 }
 
 private fun stableYOffset(wordId: String): Float {
