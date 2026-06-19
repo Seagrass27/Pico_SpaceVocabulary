@@ -31,17 +31,15 @@ fun mainApp(scope: SpatialAppScope) =
         WindowContainer(
             id = LearningWindowId,
             form = Form.Planar,
-            defaultSize = WindowContainerSize(width = 820.dp, height = 720.dp),
+            defaultSize = WindowContainerSize(width = 1120.dp, height = 920.dp),
             placement = {
-                containers.firstOrNull { it.state.isFocused }?.let {
-                    Placement.right(it, offset = 48.dp)
-                } ?: Placement.none()
+                Placement.none()
             }
         ) {
             PicoTheme {
                 LearningScreen(
                     bundle = this.bundle,
-                    modifier = Modifier.windowConstraints(width = 820.dp, height = 720.dp)
+                    modifier = Modifier.windowConstraints(width = 1120.dp, height = 920.dp)
                 )
             }
         }

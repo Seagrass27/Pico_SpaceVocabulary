@@ -40,6 +40,8 @@ import com.example.spacewords.TopicBundleKey
 import com.example.spacewords.data.SpaceWordsStore
 import com.example.spacewords.model.Topic
 import com.example.spacewords.model.Topics
+import com.example.spacewords.model.ensureVocabularyLoaded
+import com.example.spacewords.model.findWord
 import com.pico.spatial.ui.design.Text
 import com.pico.spatial.ui.foundation.hover.spatialHoverEffect
 import com.pico.spatial.ui.foundation.material.backgroundMaterial
@@ -52,10 +54,11 @@ import androidx.compose.runtime.rememberCoroutineScope
 @Composable
 fun HomeScreen(modifier: Modifier = Modifier) {
     val context = LocalContext.current
+    ensureVocabularyLoaded(context)
     SpaceWordsStore.ensureLoaded(context)
     val version by SpaceWordsStore.version
-    val revisionCount = SpaceWordsStore.revisionWords().size
-    val rememberedCount = SpaceWordsStore.rememberedWords().size
+    val revisionCount = SpaceWordsStore.revisionWords().count { findWord(it.wordId) != null }
+    val rememberedCount = SpaceWordsStore.rememberedWords().count { findWord(it.wordId) != null }
     val spatialNavigator = LocalSpatialNavigator.current
     val coroutineScope = rememberCoroutineScope()
 
@@ -73,11 +76,14 @@ fun HomeScreen(modifier: Modifier = Modifier) {
             TopicGrid(
                 topics = Topics,
                 onTopicSelected = { topic ->
-                    spatialNavigator.openWindowContainer(
-                        id = LearningWindowId,
-                        tag = "$LearningWindowTag-${topic.id}",
-                        bundle = Bundle().apply { putString(TopicBundleKey, topic.id) }
-                    )
+                    coroutineScope.launch {
+                        spatialNavigator.minimizeWindowContainer(HomeWindowId)
+                        spatialNavigator.openWindowContainer(
+                            id = LearningWindowId,
+                            tag = "$LearningWindowTag-${topic.id}",
+                            bundle = Bundle().apply { putString(TopicBundleKey, topic.id) }
+                        )
+                    }
                 }
             )
             Row(horizontalArrangement = Arrangement.spacedBy(18.dp)) {

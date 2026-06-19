@@ -1,9 +1,13 @@
 package com.example.spacewords.ui
 
+import android.content.Context
+import android.media.MediaPlayer
 import android.os.Bundle
+import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -13,11 +17,16 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -30,8 +39,10 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.spacewords.data.SpaceWordsStore
+import com.example.spacewords.HomeWindowId
 import com.example.spacewords.model.Topic
 import com.example.spacewords.model.VocabWord
+import com.example.spacewords.model.ensureVocabularyLoaded
 import com.example.spacewords.model.findTopic
 import com.pico.spatial.ui.design.Text
 import com.pico.spatial.ui.foundation.hover.spatialHoverEffect
@@ -39,14 +50,31 @@ import com.pico.spatial.ui.foundation.material.backgroundMaterial
 import com.pico.spatial.ui.platform.Material
 import com.pico.spatial.ui.platform.containers.LocalSpatialNavigator
 import com.example.spacewords.TopicBundleKey
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 
 @Composable
 fun LearningScreen(bundle: Bundle?, modifier: Modifier = Modifier) {
-    SpaceWordsStore.ensureLoaded(LocalContext.current)
+    val context = LocalContext.current
+    ensureVocabularyLoaded(context)
+    SpaceWordsStore.ensureLoaded(context)
     val topic = remember(bundle) { findTopic(bundle?.getString(TopicBundleKey)) }
-    var index by remember(topic.id) { mutableIntStateOf(0) }
+    var index by remember(topic.id) {
+        mutableIntStateOf(SpaceWordsStore.learningIndexFor(topic.id).coerceIn(0, topic.words.size))
+    }
     val spatialNavigator = LocalSpatialNavigator.current
     val currentWord = topic.words.getOrNull(index)
+    val latestIndex by rememberUpdatedState(index)
+
+    DisposableEffect(topic.id) {
+        onDispose {
+            SpaceWordsStore.saveLearningIndex(topic.id, latestIndex)
+            CoroutineScope(Dispatchers.Main).launch {
+                spatialNavigator.restoreWindowContainer(HomeWindowId)
+            }
+        }
+    }
 
     Box(
         modifier = modifier
@@ -55,11 +83,11 @@ fun LearningScreen(bundle: Bundle?, modifier: Modifier = Modifier) {
             .padding(30.dp)
     ) {
         if (currentWord == null) {
-            CompletionPanel(topic = topic, onClose = { spatialNavigator.closeWindowContainer() })
+            CompletionPanel(topic = topic)
         } else {
             Column(
                 modifier = Modifier.fillMaxSize(),
-                verticalArrangement = Arrangement.spacedBy(22.dp)
+                verticalArrangement = Arrangement.spacedBy(20.dp)
             ) {
                 LearningHeader(topic = topic, index = index)
                 WordCard(word = currentWord, topic = topic, modifier = Modifier.weight(1f))
@@ -70,7 +98,9 @@ fun LearningScreen(bundle: Bundle?, modifier: Modifier = Modifier) {
                             .height(76.dp),
                         onClick = {
                             SpaceWordsStore.putInRevision(currentWord.id)
-                            index += 1
+                            val nextIndex = (index + 1).coerceAtMost(topic.words.size)
+                            index = nextIndex
+                            SpaceWordsStore.saveLearningIndex(topic.id, nextIndex)
                         },
                         label = "Add to Revision"
                     )
@@ -80,7 +110,9 @@ fun LearningScreen(bundle: Bundle?, modifier: Modifier = Modifier) {
                             .height(76.dp),
                         onClick = {
                             SpaceWordsStore.markRemembered(currentWord.id)
-                            index += 1
+                            val nextIndex = (index + 1).coerceAtMost(topic.words.size)
+                            index = nextIndex
+                            SpaceWordsStore.saveLearningIndex(topic.id, nextIndex)
                         },
                         label = "Remembered"
                     )
@@ -129,54 +161,141 @@ private fun LearningHeader(topic: Topic, index: Int) {
 
 @Composable
 private fun WordCard(word: VocabWord, topic: Topic, modifier: Modifier = Modifier) {
+    val context = LocalContext.current
+    val playerHolder = remember { mutableStateOf<MediaPlayer?>(null) }
+    DisposableEffect(Unit) {
+        onDispose {
+            playerHolder.value?.release()
+            playerHolder.value = null
+        }
+    }
     Column(
         modifier = modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(32.dp))
             .background(Color.White.copy(alpha = 0.32f))
-            .padding(28.dp),
+            .padding(30.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Box(
+        Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(190.dp)
-                .clip(RoundedCornerShape(24.dp))
-                .background(
-                    Brush.linearGradient(
-                        listOf(topic.tint.copy(alpha = 0.78f), Color.White.copy(alpha = 0.42f))
-                    )
-                ),
-            contentAlignment = Alignment.Center
+                .weight(1f),
+            horizontalArrangement = Arrangement.spacedBy(34.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Text("Image placeholder", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+            DefinitionImagePlaceholder(
+                topic = topic,
+                modifier = Modifier
+                    .weight(1.18f)
+                    .aspectRatio(1f)
+            )
+            Box(
+                modifier = Modifier
+                    .weight(0.92f)
+                    .fillMaxSize()
+            ) {
+                Column(
+                    modifier = Modifier
+                        .align(Alignment.CenterStart)
+                        .fillMaxWidth()
+                        .verticalScroll(rememberScrollState()),
+                    horizontalAlignment = Alignment.Start
+                ) {
+                    Text(
+                        text = word.word,
+                        color = Color(0xFF17202C),
+                        fontSize = 54.sp,
+                        fontWeight = FontWeight.Bold,
+                        textAlign = TextAlign.Start
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Text(text = word.phonetic, color = Color(0xFF617086), fontSize = 21.sp)
+                    Spacer(Modifier.height(14.dp))
+                    ActionButton(
+                        onClick = { playPronunciation(context, word, playerHolder.value) { playerHolder.value = it } },
+                        modifier = Modifier.size(width = 176.dp, height = 50.dp),
+                        label = "Pronunciation"
+                    )
+                    Spacer(Modifier.height(24.dp))
+                    Text(
+                        text = word.meaningZh,
+                        color = Color(0xFF2D3948),
+                        fontSize = 25.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        textAlign = TextAlign.Start
+                    )
+                    Spacer(Modifier.height(18.dp))
+                    Text(
+                        text = word.example,
+                        color = Color(0xFF4D5C6F),
+                        fontSize = 18.sp,
+                        textAlign = TextAlign.Start
+                    )
+                    if (word.exampleZh.isNotBlank()) {
+                        Spacer(Modifier.height(10.dp))
+                        Text(
+                            text = word.exampleZh,
+                            color = Color(0xFF667487),
+                            fontSize = 16.sp,
+                            textAlign = TextAlign.Start
+                        )
+                    }
+                }
+            }
         }
-        Spacer(Modifier.height(28.dp))
-        Text(
-            text = word.word,
-            color = Color(0xFF17202C),
-            fontSize = 54.sp,
-            fontWeight = FontWeight.Bold,
-            textAlign = TextAlign.Center
-        )
-        Spacer(Modifier.height(6.dp))
-        Text(text = word.phonetic, color = Color(0xFF617086), fontSize = 22.sp)
-        Spacer(Modifier.height(12.dp))
-        ActionButton(onClick = {}, modifier = Modifier.size(width = 172.dp, height = 48.dp), label = "Pronunciation")
-        Spacer(Modifier.height(22.dp))
-        Text(text = word.meaningZh, color = Color(0xFF2D3948), fontSize = 28.sp, fontWeight = FontWeight.SemiBold)
-        Spacer(Modifier.height(18.dp))
-        Text(
-            text = word.example,
-            color = Color(0xFF4D5C6F),
-            fontSize = 21.sp,
-            textAlign = TextAlign.Center
-        )
     }
 }
 
 @Composable
-private fun CompletionPanel(topic: Topic, onClose: () -> Unit) {
+private fun DefinitionImagePlaceholder(topic: Topic, modifier: Modifier = Modifier) {
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(24.dp))
+            .background(
+                Brush.linearGradient(
+                    listOf(topic.tint.copy(alpha = 0.62f), Color.White.copy(alpha = 0.42f))
+                )
+            ),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = "Definition image placeholder",
+            color = Color.White.copy(alpha = 0.88f),
+            fontSize = 17.sp,
+            fontWeight = FontWeight.Bold
+        )
+    }
+}
+
+private fun playPronunciation(
+    context: Context,
+    word: VocabWord,
+    currentPlayer: MediaPlayer?,
+    updatePlayer: (MediaPlayer?) -> Unit
+) {
+    if (word.audioPath.isBlank()) return
+    runCatching {
+        currentPlayer?.release()
+        val descriptor = context.assets.openFd(word.audioPath)
+        val player = MediaPlayer()
+        player.setDataSource(descriptor.fileDescriptor, descriptor.startOffset, descriptor.length)
+        descriptor.close()
+        player.setOnCompletionListener {
+            it.release()
+            updatePlayer(null)
+        }
+        player.prepare()
+        player.start()
+        updatePlayer(player)
+    }.onFailure {
+        Toast.makeText(context, "Audio unavailable", Toast.LENGTH_SHORT).show()
+        updatePlayer(null)
+    }
+}
+
+@Composable
+private fun CompletionPanel(topic: Topic) {
     Column(
         modifier = Modifier.fillMaxSize(),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -190,12 +309,10 @@ private fun CompletionPanel(topic: Topic, onClose: () -> Unit) {
         )
         Spacer(Modifier.height(12.dp))
         Text(
-            text = "Your choices were saved locally.",
+            text = "Your choices were saved locally. Use the window close control to return home.",
             color = Color(0xFF6F7B89),
             fontSize = 18.sp
         )
-        Spacer(Modifier.height(28.dp))
-        ActionButton(onClick = onClose, modifier = Modifier.size(width = 180.dp, height = 62.dp), label = "Close")
     }
 }
 

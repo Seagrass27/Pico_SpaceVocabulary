@@ -21,6 +21,7 @@ object SpaceWordsStore {
     private const val PrefName = "space_words_progress"
     private const val RevisionKey = "revision"
     private const val RememberedKey = "remembered"
+    private const val LearningPrefix = "learning_index_"
 
     private var loaded = false
     private lateinit var appContext: Context
@@ -52,6 +53,20 @@ object SpaceWordsStore {
         progress.values
             .filter { it.status == WordStatus.Remembered }
             .sortedByDescending { it.rememberedAt ?: it.addedAt }
+
+    fun learningIndexFor(topicId: String): Int {
+        if (!loaded) return 0
+        return appContext.getSharedPreferences(PrefName, Context.MODE_PRIVATE)
+            .getInt(LearningPrefix + topicId, 0)
+    }
+
+    fun saveLearningIndex(topicId: String, index: Int) {
+        if (!loaded) return
+        appContext.getSharedPreferences(PrefName, Context.MODE_PRIVATE)
+            .edit()
+            .putInt(LearningPrefix + topicId, index.coerceAtLeast(0))
+            .apply()
+    }
 
     fun putInRevision(wordId: String) {
         val existing = progress[wordId]

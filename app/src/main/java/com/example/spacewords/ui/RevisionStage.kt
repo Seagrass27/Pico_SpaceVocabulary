@@ -14,10 +14,13 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
@@ -41,6 +44,7 @@ import com.example.spacewords.HomeWindowId
 import com.example.spacewords.data.SpaceWordsStore
 import com.example.spacewords.data.WordProgress
 import com.example.spacewords.model.VocabWord
+import com.example.spacewords.model.ensureVocabularyLoaded
 import com.example.spacewords.model.findWord
 import com.pico.spatial.core.ecs.Component
 import com.pico.spatial.core.ecs.EntityQueryCondition
@@ -65,6 +69,7 @@ import kotlin.math.sin
 @Composable
 fun RevisionStage() {
     val context = LocalContext.current
+    ensureVocabularyLoaded(context)
     SpaceWordsStore.ensureLoaded(context)
     val version by SpaceWordsStore.version
     val revision = remember { SpaceWordsStore.revisionWords() }
@@ -344,15 +349,53 @@ private fun RevisionWordCard(
         Spacer(Modifier.height(6.dp))
         Text(text = word.phonetic, color = Color(0xFF657386), fontSize = 20.sp)
         Spacer(Modifier.height(12.dp))
-        Text(text = word.meaningZh, color = Color(0xFF2C3745), fontSize = 26.sp, fontWeight = FontWeight.SemiBold)
-        Spacer(Modifier.height(16.dp))
-        Text(
-            text = word.example,
-            color = Color(0xFF506174),
-            fontSize = 19.sp,
-            textAlign = TextAlign.Center
-        )
-        Spacer(Modifier.height(24.dp))
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .verticalScroll(rememberScrollState()),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(86.dp)
+                    .clip(RoundedCornerShape(22.dp))
+                    .background(Color.White.copy(alpha = 0.28f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = "Definition image placeholder",
+                    color = Color(0xFF6B7888),
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
+            Spacer(Modifier.height(12.dp))
+            Text(
+                text = word.meaningZh,
+                color = Color(0xFF2C3745),
+                fontSize = 22.sp,
+                fontWeight = FontWeight.SemiBold,
+                textAlign = TextAlign.Center
+            )
+            Spacer(Modifier.height(12.dp))
+            Text(
+                text = word.example,
+                color = Color(0xFF506174),
+                fontSize = 17.sp,
+                textAlign = TextAlign.Center
+            )
+            if (word.exampleZh.isNotBlank()) {
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    text = word.exampleZh,
+                    color = Color(0xFF657386),
+                    fontSize = 15.sp,
+                    textAlign = TextAlign.Center
+                )
+            }
+        }
+        Spacer(Modifier.height(18.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
             StageActionButton(onClick = onKeep, modifier = Modifier.size(width = 210.dp, height = 62.dp), label = "Keep Reviewing")
             StageActionButton(onClick = onRemembered, modifier = Modifier.size(width = 180.dp, height = 62.dp), label = "Remembered")
