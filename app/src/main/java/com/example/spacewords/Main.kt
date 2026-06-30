@@ -4,6 +4,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.example.spacewords.ui.HomeScreen
 import com.example.spacewords.ui.LearningScreen
+import com.example.spacewords.ui.QuizScreen
 import com.example.spacewords.ui.RevisionStage
 import com.pico.spatial.ui.design.PicoTheme
 import com.pico.spatial.ui.foundation.dsl.DefaultWindowContainer
@@ -17,6 +18,7 @@ import com.pico.spatial.ui.foundation.dsl.WindowContainerSize
 const val HomeWindowId = "SpaceWordsHome"
 const val LearningWindowId = "SpaceWordsLearning"
 const val LearningWindowTag = "learning"
+const val QuizWindowId = "SpaceWordsQuiz"
 const val RevisionStageId = "SpaceWordsRevisionStage"
 const val TopicBundleKey = "topic"
 
@@ -41,6 +43,19 @@ fun mainApp(scope: SpatialAppScope) =
                     bundle = this.bundle,
                     modifier = Modifier.windowConstraints(width = 1120.dp, height = 920.dp)
                 )
+            }
+        }
+
+        WindowContainer(
+            id = QuizWindowId,
+            form = Form.Planar,
+            defaultSize = WindowContainerSize(width = 940.dp, height = 760.dp),
+            placement = {
+                Placement.none()
+            }
+        ) {
+            PicoTheme {
+                QuizScreen(Modifier.windowConstraints(width = 940.dp, height = 760.dp))
             }
         }
 

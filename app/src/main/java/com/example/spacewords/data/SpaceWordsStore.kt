@@ -7,7 +7,8 @@ import androidx.compose.runtime.mutableStateOf
 enum class WordStatus {
     New,
     Revision,
-    Remembered
+    Remembered,
+    Mastered
 }
 
 data class WordProgress(
@@ -21,6 +22,7 @@ object SpaceWordsStore {
     private const val PrefName = "space_words_progress"
     private const val RevisionKey = "revision"
     private const val RememberedKey = "remembered"
+    private const val MasteredKey = "mastered"
     private const val LearningPrefix = "learning_index_"
 
     private var loaded = false
@@ -38,6 +40,9 @@ object SpaceWordsStore {
         prefs.getStringSet(RememberedKey, emptySet()).orEmpty().forEach { encoded ->
             decode(encoded, WordStatus.Remembered)?.let { progress[it.wordId] = it }
         }
+        prefs.getStringSet(MasteredKey, emptySet()).orEmpty().forEach { encoded ->
+            decode(encoded, WordStatus.Mastered)?.let { progress[it.wordId] = it }
+        }
         loaded = true
         version.value += 1
     }
@@ -52,6 +57,11 @@ object SpaceWordsStore {
     fun rememberedWords(): List<WordProgress> =
         progress.values
             .filter { it.status == WordStatus.Remembered }
+            .sortedByDescending { it.rememberedAt ?: it.addedAt }
+
+    fun masteredWords(): List<WordProgress> =
+        progress.values
+            .filter { it.status == WordStatus.Mastered }
             .sortedByDescending { it.rememberedAt ?: it.addedAt }
 
     fun learningIndexFor(topicId: String): Int {
@@ -91,6 +101,23 @@ object SpaceWordsStore {
         persist()
     }
 
+    fun markMastered(wordId: String) {
+        val existing = progress[wordId]
+        val now = System.currentTimeMillis()
+        progress[wordId] = WordProgress(
+            wordId = wordId,
+            status = WordStatus.Mastered,
+            addedAt = existing?.addedAt ?: now,
+            rememberedAt = now
+        )
+        persist()
+    }
+
+    fun resetToNew(wordId: String) {
+        progress.remove(wordId)
+        persist()
+    }
+
     private fun persist() {
         if (!loaded) return
         val revision = progress.values
@@ -101,10 +128,15 @@ object SpaceWordsStore {
             .filter { it.status == WordStatus.Remembered }
             .map { encode(it) }
             .toSet()
+        val mastered = progress.values
+            .filter { it.status == WordStatus.Mastered }
+            .map { encode(it) }
+            .toSet()
         appContext.getSharedPreferences(PrefName, Context.MODE_PRIVATE)
             .edit()
             .putStringSet(RevisionKey, revision)
             .putStringSet(RememberedKey, remembered)
+            .putStringSet(MasteredKey, mastered)
             .apply()
         version.value += 1
     }

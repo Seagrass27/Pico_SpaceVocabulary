@@ -35,6 +35,7 @@ import com.example.spacewords.R
 import com.example.spacewords.HomeWindowId
 import com.example.spacewords.LearningWindowId
 import com.example.spacewords.LearningWindowTag
+import com.example.spacewords.QuizWindowId
 import com.example.spacewords.RevisionStageId
 import com.example.spacewords.TopicBundleKey
 import com.example.spacewords.data.SpaceWordsStore
@@ -59,6 +60,7 @@ fun HomeScreen(modifier: Modifier = Modifier) {
     val version by SpaceWordsStore.version
     val revisionCount = SpaceWordsStore.revisionWords().count { findWord(it.wordId) != null }
     val rememberedCount = SpaceWordsStore.rememberedWords().count { findWord(it.wordId) != null }
+    val masteredCount = SpaceWordsStore.masteredWords().count { findWord(it.wordId) != null }
     val spatialNavigator = LocalSpatialNavigator.current
     val coroutineScope = rememberCoroutineScope()
 
@@ -72,7 +74,7 @@ fun HomeScreen(modifier: Modifier = Modifier) {
             modifier = Modifier.fillMaxSize(),
             verticalArrangement = Arrangement.spacedBy(24.dp)
         ) {
-            Header(rememberedCount = rememberedCount, revisionCount = revisionCount)
+            Header(rememberedCount = rememberedCount, revisionCount = revisionCount, masteredCount = masteredCount)
             TopicGrid(
                 topics = Topics,
                 onTopicSelected = { topic ->
@@ -103,10 +105,14 @@ fun HomeScreen(modifier: Modifier = Modifier) {
                 WideActionPanel(
                     modifier = Modifier.weight(1f),
                     title = "Quiz",
-                    subtitle = "A mastery test for remembered words is reserved here.",
+                    subtitle = "Test words that you marked as remembered.",
                     value = "$rememberedCount ready",
-                    enabled = false,
-                    onClick = {}
+                    enabled = rememberedCount > 0,
+                    onClick = {
+                        coroutineScope.launch {
+                            spatialNavigator.openWindowContainer(id = QuizWindowId)
+                        }
+                    }
                 )
             }
         }
@@ -115,7 +121,7 @@ fun HomeScreen(modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun Header(rememberedCount: Int, revisionCount: Int) {
+private fun Header(rememberedCount: Int, revisionCount: Int, masteredCount: Int) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -138,7 +144,7 @@ private fun Header(rememberedCount: Int, revisionCount: Int) {
             )
         }
         Text(
-            text = "$rememberedCount remembered  ·  $revisionCount in revision",
+            text = "$masteredCount mastered  ·  $rememberedCount ready  ·  $revisionCount in revision",
             color = Color(0xFF516175),
             fontSize = 17.sp,
             fontWeight = FontWeight.SemiBold
