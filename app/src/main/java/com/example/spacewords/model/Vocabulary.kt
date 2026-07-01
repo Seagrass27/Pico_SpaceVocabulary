@@ -21,6 +21,7 @@ data class VocabWord(
     val example: String,
     val exampleZh: String,
     val audioPath: String,
+    val exampleAudioPath: String,
     val imagePath: String? = null
 )
 
@@ -54,6 +55,7 @@ private val FallbackTopics = TopicMetas.map { meta ->
                 example = "Vocabulary content will appear after the bundle is loaded.",
                 exampleZh = "词表资源加载后会显示完整内容。",
                 audioPath = "",
+                exampleAudioPath = "",
                 imagePath = null
             )
         )
@@ -108,6 +110,7 @@ private fun parseWords(
         for (index in 0 until array.length()) {
             val item = array.getJSONObject(index)
             val audio = item.optString("audio")
+            val exampleAudio = item.optString("exampleAudio")
             val word = item.getString("word")
             val topicId = item.getString("topic")
             val image = item.optString("image")
@@ -130,6 +133,7 @@ private fun parseWords(
                     example = item.optString("example"),
                     exampleZh = item.optString("exampleZh"),
                     audioPath = if (audio.isBlank()) "" else assetPath(audio),
+                    exampleAudioPath = if (exampleAudio.isBlank()) "" else assetPath(exampleAudio),
                     imagePath = image
                 )
             )

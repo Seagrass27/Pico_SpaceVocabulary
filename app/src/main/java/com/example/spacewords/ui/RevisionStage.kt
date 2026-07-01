@@ -1,6 +1,7 @@
 package com.example.spacewords.ui
 
 import android.os.SystemClock
+import android.media.MediaPlayer
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -322,6 +323,15 @@ private fun RevisionWordCard(
     onRemembered: () -> Unit,
     onKeep: () -> Unit
 ) {
+    val context = LocalContext.current
+    val playerHolder = remember { mutableStateOf<MediaPlayer?>(null) }
+    DisposableEffect(word.id) {
+        onDispose {
+            playerHolder.value?.release()
+            playerHolder.value = null
+        }
+    }
+
     Column(
         modifier = Modifier
             .size(width = 700.dp, height = 470.dp)
@@ -384,12 +394,26 @@ private fun RevisionWordCard(
                         textAlign = TextAlign.Start
                     )
                     Spacer(Modifier.height(12.dp))
-                    Text(
-                        text = word.example,
-                        color = Color(0xFF506174),
-                        fontSize = 16.sp,
-                        textAlign = TextAlign.Start
-                    )
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        verticalAlignment = Alignment.Top
+                    ) {
+                        Text(
+                            modifier = Modifier.weight(1f),
+                            text = word.example,
+                            color = Color(0xFF506174),
+                            fontSize = 16.sp,
+                            textAlign = TextAlign.Start
+                        )
+                        AudioIconButton(
+                            onClick = {
+                                playAssetAudio(context, word.exampleAudioPath, playerHolder.value) {
+                                    playerHolder.value = it
+                                }
+                            },
+                            modifier = Modifier
+                        )
+                    }
                     if (word.exampleZh.isNotBlank()) {
                         Spacer(Modifier.height(8.dp))
                         Text(

@@ -1,9 +1,7 @@
 package com.example.spacewords.ui
 
-import android.content.Context
 import android.media.MediaPlayer
 import android.os.Bundle
-import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -214,7 +212,7 @@ private fun WordCard(word: VocabWord, topic: Topic, modifier: Modifier = Modifie
                     Text(text = word.phonetic, color = Color(0xFF617086), fontSize = 21.sp)
                     Spacer(Modifier.height(14.dp))
                     ActionButton(
-                        onClick = { playPronunciation(context, word, playerHolder.value) { playerHolder.value = it } },
+                        onClick = { playAssetAudio(context, word.audioPath, playerHolder.value) { playerHolder.value = it } },
                         modifier = Modifier.size(width = 176.dp, height = 50.dp),
                         label = "Pronunciation"
                     )
@@ -227,12 +225,22 @@ private fun WordCard(word: VocabWord, topic: Topic, modifier: Modifier = Modifie
                         textAlign = TextAlign.Start
                     )
                     Spacer(Modifier.height(18.dp))
-                    Text(
-                        text = word.example,
-                        color = Color(0xFF4D5C6F),
-                        fontSize = 18.sp,
-                        textAlign = TextAlign.Start
-                    )
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        verticalAlignment = Alignment.Top
+                    ) {
+                        Text(
+                            modifier = Modifier.weight(1f),
+                            text = word.example,
+                            color = Color(0xFF4D5C6F),
+                            fontSize = 18.sp,
+                            textAlign = TextAlign.Start
+                        )
+                        AudioIconButton(
+                            onClick = { playAssetAudio(context, word.exampleAudioPath, playerHolder.value) { playerHolder.value = it } },
+                            modifier = Modifier
+                        )
+                    }
                     if (word.exampleZh.isNotBlank()) {
                         Spacer(Modifier.height(10.dp))
                         Text(
@@ -268,32 +276,6 @@ private fun DefinitionImage(word: VocabWord, topic: Topic, modifier: Modifier = 
             fontSize = 17.sp,
             fontWeight = FontWeight.Bold
         )
-    }
-}
-
-private fun playPronunciation(
-    context: Context,
-    word: VocabWord,
-    currentPlayer: MediaPlayer?,
-    updatePlayer: (MediaPlayer?) -> Unit
-) {
-    if (word.audioPath.isBlank()) return
-    runCatching {
-        currentPlayer?.release()
-        val descriptor = context.assets.openFd(word.audioPath)
-        val player = MediaPlayer()
-        player.setDataSource(descriptor.fileDescriptor, descriptor.startOffset, descriptor.length)
-        descriptor.close()
-        player.setOnCompletionListener {
-            it.release()
-            updatePlayer(null)
-        }
-        player.prepare()
-        player.start()
-        updatePlayer(player)
-    }.onFailure {
-        Toast.makeText(context, "Audio unavailable", Toast.LENGTH_SHORT).show()
-        updatePlayer(null)
     }
 }
 
