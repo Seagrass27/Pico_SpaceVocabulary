@@ -45,6 +45,7 @@ import androidx.compose.ui.unit.sp
 import com.example.spacewords.HomeWindowId
 import com.example.spacewords.data.SpaceWordsStore
 import com.example.spacewords.data.WordProgress
+import com.example.spacewords.model.Difficulty
 import com.example.spacewords.model.VocabWord
 import com.example.spacewords.model.ensureVocabularyLoaded
 import com.example.spacewords.model.findWord
@@ -67,6 +68,7 @@ import kotlinx.coroutines.launch
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.sin
+import kotlin.math.sqrt
 
 @Composable
 fun RevisionStage() {
@@ -78,15 +80,29 @@ fun RevisionStage() {
     val orbitWords = revision.mapNotNull { progress ->
         findWord(progress.wordId)?.let { OrbitWord(it, progress) }
     }
-    val orbitItems = orbitWords.mapIndexed { index, orbitWord ->
-        val angle = orbitAngle(index = index, count = orbitWords.size)
-        val distance = orbitDistance(index = index, count = orbitWords.size)
-        OrbitItem(
-            orbitWord = orbitWord,
-            angle = angle,
-            distance = distance,
-            position = orbitPosition(angle = angle, distance = distance, y = 1.42f)
-        )
+    val distanceByWordId = orbitWords.mapIndexed { index, orbitWord ->
+        orbitWord.word.id to orbitDistance(index = index, count = orbitWords.size)
+    }.toMap()
+    val orbitItems = Difficulty.entries.flatMap { difficulty ->
+        val laneWords = orbitWords.filter { it.word.difficulty == difficulty.level }
+        laneWords.mapIndexed { laneIndex, orbitWord ->
+            val angle = orbitAngle(index = laneIndex, count = laneWords.size) + orbitAngleOffset(difficulty)
+            val distance = distanceByWordId[orbitWord.word.id] ?: orbitDistance(index = laneIndex, count = laneWords.size)
+            val y = orbitTrackY(difficulty)
+            val horizontalDistance = horizontalOrbitDistance(distance = distance, y = y)
+            OrbitItem(
+                orbitWord = orbitWord,
+                angle = angle,
+                distance = distance,
+                horizontalDistance = horizontalDistance,
+                y = y,
+                position = orbitPosition(
+                    angle = angle,
+                    distance = horizontalDistance,
+                    y = y + stableYOffset(orbitWord.word.id)
+                )
+            )
+        }
     }
     var selectedId by remember { mutableStateOf<String?>(null) }
     val selectedItem = selectedId?.let { id -> orbitItems.firstOrNull { it.orbitWord.word.id == id } }
@@ -125,8 +141,8 @@ fun RevisionStage() {
                                 RevisionOrbitComponent(
                                     wordId = word.id,
                                     baseAngle = item.angle,
-                                    distance = item.distance,
-                                    y = 1.42f + stableYOffset(word.id)
+                                    distance = item.horizontalDistance,
+                                    y = item.y + stableYOffset(word.id)
                                 )
                             )
                             attachment.components[TransformComponent::class.java]?.setPosition(item.position)
@@ -144,7 +160,6 @@ fun RevisionStage() {
                         AttachmentPanel(id = tagId(item.orbitWord.word.id)) {
                             OrbitWordTag(
                                 word = item.orbitWord.word,
-                                distance = item.distance,
                                 onClick = {
                                     RevisionOrbitMotion.pause()
                                     selectedId = item.orbitWord.word.id
@@ -174,7 +189,11 @@ fun RevisionStage() {
                         } else {
                             val angle = animatedOrbitAngle(item, RevisionOrbitMotion.currentOffsetDeg())
                             card.components[TransformComponent::class.java]?.setPosition(
-                                orbitPosition(angle = angle, distance = (item.distance - 0.12f).coerceAtLeast(0.58f), y = 1.5f)
+                                orbitPosition(
+                                    angle = angle,
+                                    distance = (item.horizontalDistance - 0.12f).coerceAtLeast(0.58f),
+                                    y = item.y + 0.08f
+                                )
                             )
                             card.components[TransformComponent::class.java]?.setEulerAngles(faceCenterEuler(angle))
                         }
@@ -212,15 +231,23 @@ fun RevisionStage() {
 }
 
 @Composable
-private fun OrbitWordTag(word: VocabWord, distance: Float, onClick: () -> Unit) {
+private fun OrbitWordTag(word: VocabWord, onClick: () -> Unit) {
     val context = LocalContext.current
-    val priority = ((1.35f - distance) / 0.7f).coerceIn(0f, 1f)
     val shape = RoundedCornerShape(24.dp)
-    val accentColor = revisionUrgencyColor(priority)
-    val borderColor = accentColor.copy(alpha = 0.36f + priority * 0.42f)
+    val accentColor = revisionTopicColor(word.topicId)
+    val borderColor = accentColor.copy(alpha = 0.72f)
     Box(
         modifier = Modifier
             .size(width = 280.dp, height = 112.dp)
+            .shadow(
+                elevation = 12.dp,
+                shape = shape,
+                ambientColor = accentColor.copy(alpha = 0.26f),
+                spotColor = accentColor.copy(alpha = 0.22f)
+            )
+            .clip(shape)
+            .background(Color.White.copy(alpha = 0.44f))
+            .border(width = 1.5.dp, color = borderColor, shape = shape)
             .pointerInput(word.id) {
                 awaitEachGesture {
                     awaitFirstDown(requireUnconsumed = false)
@@ -274,34 +301,13 @@ private fun OrbitWordTag(word: VocabWord, distance: Float, onClick: () -> Unit) 
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .padding((7 - priority * 5).dp)
-                .shadow(
-                    elevation = (4 + priority * 18).dp,
-                    shape = shape,
-                    ambientColor = accentColor.copy(alpha = 0.20f + priority * 0.42f),
-                    spotColor = accentColor.copy(alpha = 0.18f + priority * 0.38f)
-                )
                 .clip(shape)
-                .background(accentColor.copy(alpha = 0.10f + priority * 0.18f))
-        )
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(4.dp)
-                .shadow(
-                    elevation = (2 + priority * 8).dp,
-                    shape = shape,
-                    ambientColor = Color.White.copy(alpha = 0.18f + priority * 0.32f),
-                    spotColor = accentColor.copy(alpha = 0.16f + priority * 0.26f)
-                )
-                .clip(shape)
-                .background(Color(0xFFEAF4FF).copy(alpha = 0.38f + priority * 0.34f))
-                .border(width = (1 + priority).dp, color = borderColor, shape = shape),
+                .background(accentColor.copy(alpha = 0.20f)),
             contentAlignment = Alignment.Center
         ) {
             Text(
                 text = word.word,
-                color = Color(0xFF263344).copy(alpha = 0.76f + priority * 0.24f),
+                color = Color(0xFF263344).copy(alpha = 0.92f),
                 fontSize = 32.sp,
                 fontWeight = FontWeight.Bold,
                 textAlign = TextAlign.Center
@@ -310,11 +316,15 @@ private fun OrbitWordTag(word: VocabWord, distance: Float, onClick: () -> Unit) 
     }
 }
 
-private fun revisionUrgencyColor(priority: Float): Color =
-    when {
-        priority > 0.66f -> Color(0xFFFF8A7A)
-        priority > 0.33f -> Color(0xFFFFD88A)
-        else -> Color(0xFF8FD7FF)
+private fun revisionTopicColor(topicId: String): Color =
+    when (topicId) {
+        "food" -> Color(0xFF7E9F72)
+        "travel" -> Color(0xFF7FAFC6)
+        "office" -> Color(0xFF7B86B8)
+        "interview" -> Color(0xFFB58BA6)
+        "workout" -> Color(0xFFC48772)
+        "education" -> Color(0xFFC4A35F)
+        else -> Color(0xFF8EA6B8)
     }
 
 @Composable
@@ -462,6 +472,8 @@ private data class OrbitItem(
     val orbitWord: OrbitWord,
     val angle: Float,
     val distance: Float,
+    val horizontalDistance: Float,
+    val y: Float,
     val position: Vector3
 )
 
@@ -476,6 +488,25 @@ private fun orbitAngle(index: Int, count: Int): Float {
     val step = (2f * PI.toFloat()) / count.toFloat()
     return index * step
 }
+
+private fun orbitTrackY(difficulty: Difficulty): Float =
+    when (difficulty) {
+        Difficulty.Advanced -> 1.78f
+        Difficulty.Intermediate -> 1.42f
+        Difficulty.Beginner -> 1.06f
+    }
+
+private fun horizontalOrbitDistance(distance: Float, y: Float): Float {
+    val verticalDelta = y - OrbitCenterY
+    return sqrt((distance * distance - verticalDelta * verticalDelta).coerceAtLeast(0.38f * 0.38f))
+}
+
+private fun orbitAngleOffset(difficulty: Difficulty): Float =
+    when (difficulty) {
+        Difficulty.Advanced -> PI.toFloat() / 9f
+        Difficulty.Intermediate -> 0f
+        Difficulty.Beginner -> -PI.toFloat() / 9f
+    }
 
 private fun orbitPosition(angle: Float, distance: Float, y: Float): Vector3 =
     Vector3(
@@ -497,6 +528,7 @@ private fun shortestDegreeDelta(from: Float, to: Float): Float =
     ((to - from + 540f) % 360f) - 180f
 
 private const val OrbitAngularSpeedDegPerSecond = 6f
+private const val OrbitCenterY = 1.42f
 private const val DragActivationPx = 5f
 private const val PreDragNoiseDeadZonePx = 0.35f
 private const val ActiveDragDeadZonePx = 0.18f

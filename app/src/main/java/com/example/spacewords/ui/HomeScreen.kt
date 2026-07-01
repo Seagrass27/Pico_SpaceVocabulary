@@ -20,6 +20,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -38,7 +40,9 @@ import com.example.spacewords.LearningWindowTag
 import com.example.spacewords.QuizWindowId
 import com.example.spacewords.RevisionStageId
 import com.example.spacewords.TopicBundleKey
+import com.example.spacewords.DifficultyBundleKey
 import com.example.spacewords.data.SpaceWordsStore
+import com.example.spacewords.model.Difficulty
 import com.example.spacewords.model.Topic
 import com.example.spacewords.model.Topics
 import com.example.spacewords.model.ensureVocabularyLoaded
@@ -63,6 +67,7 @@ fun HomeScreen(modifier: Modifier = Modifier) {
     val masteredCount = SpaceWordsStore.masteredWords().count { findWord(it.wordId) != null }
     val spatialNavigator = LocalSpatialNavigator.current
     val coroutineScope = rememberCoroutineScope()
+    val selectedDifficulty = remember { mutableStateOf(Difficulty.Beginner) }
 
     Box(
         modifier = modifier
@@ -74,16 +79,26 @@ fun HomeScreen(modifier: Modifier = Modifier) {
             modifier = Modifier.fillMaxSize(),
             verticalArrangement = Arrangement.spacedBy(24.dp)
         ) {
-            Header(rememberedCount = rememberedCount, revisionCount = revisionCount, masteredCount = masteredCount)
+            Header(
+                selectedDifficulty = selectedDifficulty.value,
+                onDifficultySelected = { selectedDifficulty.value = it },
+                rememberedCount = rememberedCount,
+                revisionCount = revisionCount,
+                masteredCount = masteredCount
+            )
             TopicGrid(
                 topics = Topics,
+                difficulty = selectedDifficulty.value,
                 onTopicSelected = { topic ->
                     coroutineScope.launch {
                         spatialNavigator.minimizeWindowContainer(HomeWindowId)
                         spatialNavigator.openWindowContainer(
                             id = LearningWindowId,
                             tag = "$LearningWindowTag-${topic.id}",
-                            bundle = Bundle().apply { putString(TopicBundleKey, topic.id) }
+                            bundle = Bundle().apply {
+                                putString(TopicBundleKey, topic.id)
+                                putInt(DifficultyBundleKey, selectedDifficulty.value.level)
+                            }
                         )
                     }
                 }
@@ -121,7 +136,13 @@ fun HomeScreen(modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun Header(rememberedCount: Int, revisionCount: Int, masteredCount: Int) {
+private fun Header(
+    selectedDifficulty: Difficulty,
+    onDifficultySelected: (Difficulty) -> Unit,
+    rememberedCount: Int,
+    revisionCount: Int,
+    masteredCount: Int
+) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -143,6 +164,11 @@ private fun Header(rememberedCount: Int, revisionCount: Int, masteredCount: Int)
                 fontSize = 15.sp
             )
         }
+        DifficultySelector(
+            selectedDifficulty = selectedDifficulty,
+            onDifficultySelected = onDifficultySelected
+        )
+        Spacer(Modifier.width(24.dp))
         Text(
             text = "$masteredCount mastered  ·  $rememberedCount ready  ·  $revisionCount in revision",
             color = Color(0xFF516175),
@@ -153,7 +179,44 @@ private fun Header(rememberedCount: Int, revisionCount: Int, masteredCount: Int)
 }
 
 @Composable
-private fun TopicGrid(topics: List<Topic>, onTopicSelected: (Topic) -> Unit) {
+private fun DifficultySelector(
+    selectedDifficulty: Difficulty,
+    onDifficultySelected: (Difficulty) -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape(18.dp))
+            .background(Color.White.copy(alpha = 0.20f))
+            .padding(4.dp),
+        horizontalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        Difficulty.entries.forEach { difficulty ->
+            val selected = difficulty == selectedDifficulty
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(
+                        if (selected) Color.White.copy(alpha = 0.46f)
+                        else Color.Transparent
+                    )
+                    .clickable { onDifficultySelected(difficulty) }
+                    .spatialHoverEffect()
+                    .padding(horizontal = 14.dp, vertical = 10.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = difficulty.label,
+                    color = if (selected) Color(0xFF243044) else Color(0xFF657386),
+                    fontSize = 13.sp,
+                    fontWeight = if (selected) FontWeight.Bold else FontWeight.SemiBold
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun TopicGrid(topics: List<Topic>, difficulty: Difficulty, onTopicSelected: (Topic) -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
         topics.chunked(3).forEach { row ->
             Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -161,6 +224,7 @@ private fun TopicGrid(topics: List<Topic>, onTopicSelected: (Topic) -> Unit) {
                     TopicTile(
                         modifier = Modifier.weight(1f),
                         topic = topic,
+                        difficulty = difficulty,
                         onClick = { onTopicSelected(topic) }
                     )
                 }
@@ -170,8 +234,9 @@ private fun TopicGrid(topics: List<Topic>, onTopicSelected: (Topic) -> Unit) {
 }
 
 @Composable
-private fun TopicTile(modifier: Modifier, topic: Topic, onClick: () -> Unit) {
+private fun TopicTile(modifier: Modifier, topic: Topic, difficulty: Difficulty, onClick: () -> Unit) {
     val shape = RoundedCornerShape(22.dp)
+    val difficultyWordCount = topic.words.count { it.difficulty == difficulty.level }
     Box(
         modifier = modifier
             .aspectRatio(16f / 9f)
@@ -209,7 +274,7 @@ private fun TopicTile(modifier: Modifier, topic: Topic, onClick: () -> Unit) {
                     fontWeight = FontWeight.SemiBold
                 )
                 ShadowedText(
-                    text = "${topic.words.size} words",
+                    text = "$difficultyWordCount words",
                     color = Color.White.copy(alpha = 0.72f),
                     fontSize = 12,
                     fontWeight = FontWeight.Medium

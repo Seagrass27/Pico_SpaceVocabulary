@@ -21,6 +21,7 @@ const val LearningWindowTag = "learning"
 const val QuizWindowId = "SpaceWordsQuiz"
 const val RevisionStageId = "SpaceWordsRevisionStage"
 const val TopicBundleKey = "topic"
+const val DifficultyBundleKey = "difficulty"
 
 fun mainApp(scope: SpatialAppScope) =
     with(scope) {

@@ -16,6 +16,7 @@ data class VocabWord(
     val id: String,
     val topicId: String,
     val word: String,
+    val difficulty: Int,
     val phonetic: String,
     val meaningZh: String,
     val example: String,
@@ -50,6 +51,7 @@ private val FallbackTopics = TopicMetas.map { meta ->
                 id = "${meta.id}_sample",
                 topicId = meta.id,
                 word = meta.title.lowercase(),
+                difficulty = Difficulty.Beginner.level,
                 phonetic = "",
                 meaningZh = "词表加载中",
                 example = "Vocabulary content will appear after the bundle is loaded.",
@@ -101,6 +103,17 @@ fun findTopic(id: String?): Topic = Topics.firstOrNull { it.id == id } ?: Topics
 
 fun findWord(id: String): VocabWord? = wordsById[id]
 
+enum class Difficulty(val level: Int, val label: String) {
+    Beginner(1, "Beginner"),
+    Intermediate(2, "Intermediate"),
+    Advanced(3, "Advanced");
+
+    companion object {
+        fun fromLevel(level: Int): Difficulty =
+            entries.firstOrNull { it.level == level } ?: Beginner
+    }
+}
+
 private fun parseWords(
     array: JSONArray,
     sampleImages: Set<String>,
@@ -128,6 +141,7 @@ private fun parseWords(
                     id = item.getString("id"),
                     topicId = topicId,
                     word = word,
+                    difficulty = item.optInt("difficulty", Difficulty.Beginner.level),
                     phonetic = item.optString("phonetic"),
                     meaningZh = item.optString("meaningZh"),
                     example = item.optString("example"),

@@ -37,7 +37,10 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.spacewords.data.SpaceWordsStore
+import com.example.spacewords.data.WordStatus
+import com.example.spacewords.DifficultyBundleKey
 import com.example.spacewords.HomeWindowId
+import com.example.spacewords.model.Difficulty
 import com.example.spacewords.model.Topic
 import com.example.spacewords.model.VocabWord
 import com.example.spacewords.model.ensureVocabularyLoaded
@@ -58,16 +61,24 @@ fun LearningScreen(bundle: Bundle?, modifier: Modifier = Modifier) {
     ensureVocabularyLoaded(context)
     SpaceWordsStore.ensureLoaded(context)
     val topic = remember(bundle) { findTopic(bundle?.getString(TopicBundleKey)) }
-    var index by remember(topic.id) {
-        mutableIntStateOf(SpaceWordsStore.learningIndexFor(topic.id).coerceIn(0, topic.words.size))
+    val difficulty = remember(bundle) {
+        Difficulty.fromLevel(bundle?.getInt(DifficultyBundleKey, Difficulty.Beginner.level) ?: Difficulty.Beginner.level)
     }
+    val version by SpaceWordsStore.version
+    val difficultyWords = topic.words.filter { it.difficulty == difficulty.level }
+    val learningWords = difficultyWords.filter { SpaceWordsStore.statusFor(it.id) == WordStatus.New }
+    var index by remember(topic.id, difficulty.level) {
+        mutableIntStateOf(SpaceWordsStore.learningIndexFor(topic.id, difficulty.level).coerceAtLeast(0))
+    }
+    val currentIndex = index.coerceIn(0, learningWords.size)
     val spatialNavigator = LocalSpatialNavigator.current
-    val currentWord = topic.words.getOrNull(index)
-    val latestIndex by rememberUpdatedState(index)
+    val currentWord = learningWords.getOrNull(currentIndex)
+    val completedCount = difficultyWords.size - learningWords.size
+    val latestIndex by rememberUpdatedState(currentIndex)
 
-    DisposableEffect(topic.id) {
+    DisposableEffect(topic.id, difficulty.level) {
         onDispose {
-            SpaceWordsStore.saveLearningIndex(topic.id, latestIndex)
+            SpaceWordsStore.saveLearningIndex(topic.id, latestIndex, difficulty.level)
             CoroutineScope(Dispatchers.Main).launch {
                 spatialNavigator.restoreWindowContainer(HomeWindowId)
             }
@@ -81,13 +92,18 @@ fun LearningScreen(bundle: Bundle?, modifier: Modifier = Modifier) {
             .padding(30.dp)
     ) {
         if (currentWord == null) {
-            CompletionPanel(topic = topic)
+            CompletionPanel(topic = topic, difficulty = difficulty)
         } else {
             Column(
                 modifier = Modifier.fillMaxSize(),
                 verticalArrangement = Arrangement.spacedBy(20.dp)
             ) {
-                LearningHeader(topic = topic, index = index)
+                LearningHeader(
+                    topic = topic,
+                    difficulty = difficulty,
+                    currentPosition = (completedCount + 1).coerceAtMost(difficultyWords.size),
+                    total = difficultyWords.size
+                )
                 WordCard(word = currentWord, topic = topic, modifier = Modifier.weight(1f))
                 Row(horizontalArrangement = Arrangement.spacedBy(18.dp)) {
                     ActionButton(
@@ -96,9 +112,9 @@ fun LearningScreen(bundle: Bundle?, modifier: Modifier = Modifier) {
                             .height(76.dp),
                         onClick = {
                             SpaceWordsStore.putInRevision(currentWord.id)
-                            val nextIndex = (index + 1).coerceAtMost(topic.words.size)
+                            val nextIndex = currentIndex.coerceAtMost((learningWords.size - 1).coerceAtLeast(0))
                             index = nextIndex
-                            SpaceWordsStore.saveLearningIndex(topic.id, nextIndex)
+                            SpaceWordsStore.saveLearningIndex(topic.id, nextIndex, difficulty.level)
                         },
                         label = "Add to Revision"
                     )
@@ -108,9 +124,9 @@ fun LearningScreen(bundle: Bundle?, modifier: Modifier = Modifier) {
                             .height(76.dp),
                         onClick = {
                             SpaceWordsStore.markRemembered(currentWord.id)
-                            val nextIndex = (index + 1).coerceAtMost(topic.words.size)
+                            val nextIndex = currentIndex.coerceAtMost((learningWords.size - 1).coerceAtLeast(0))
                             index = nextIndex
-                            SpaceWordsStore.saveLearningIndex(topic.id, nextIndex)
+                            SpaceWordsStore.saveLearningIndex(topic.id, nextIndex, difficulty.level)
                         },
                         label = "Remembered"
                     )
@@ -118,15 +134,16 @@ fun LearningScreen(bundle: Bundle?, modifier: Modifier = Modifier) {
             }
         }
     }
+    version.hashCode()
 }
 
 @Composable
-private fun LearningHeader(topic: Topic, index: Int) {
+private fun LearningHeader(topic: Topic, difficulty: Difficulty, currentPosition: Int, total: Int) {
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 Text(
-                    text = topic.title,
+                    text = "${topic.title} · ${difficulty.label}",
                     color = Color(0xFF26303D),
                     fontSize = 26.sp,
                     fontWeight = FontWeight.Bold
@@ -134,7 +151,7 @@ private fun LearningHeader(topic: Topic, index: Int) {
                 Text(text = topic.subtitle, color = Color(0xFF778392), fontSize = 14.sp)
             }
             Text(
-                text = "${index + 1} / ${topic.words.size}",
+                text = "$currentPosition / $total",
                 color = Color(0xFF526173),
                 fontSize = 17.sp,
                 fontWeight = FontWeight.SemiBold
@@ -149,7 +166,7 @@ private fun LearningHeader(topic: Topic, index: Int) {
         ) {
             Box(
                 Modifier
-                    .fillMaxWidth((index + 1).toFloat() / topic.words.size)
+                    .fillMaxWidth(if (total == 0) 0f else currentPosition.toFloat() / total.toFloat())
                     .height(8.dp)
                     .background(topic.tint)
             )
@@ -280,14 +297,14 @@ private fun DefinitionImage(word: VocabWord, topic: Topic, modifier: Modifier = 
 }
 
 @Composable
-private fun CompletionPanel(topic: Topic) {
+private fun CompletionPanel(topic: Topic, difficulty: Difficulty) {
     Column(
         modifier = Modifier.fillMaxSize(),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
         Text(
-            text = "${topic.title} completed",
+            text = "${topic.title} ${difficulty.label} completed",
             color = Color(0xFF1F2733),
             fontSize = 34.sp,
             fontWeight = FontWeight.Bold

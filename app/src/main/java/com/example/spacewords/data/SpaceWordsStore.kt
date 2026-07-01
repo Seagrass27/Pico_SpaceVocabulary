@@ -64,17 +64,17 @@ object SpaceWordsStore {
             .filter { it.status == WordStatus.Mastered }
             .sortedByDescending { it.rememberedAt ?: it.addedAt }
 
-    fun learningIndexFor(topicId: String): Int {
+    fun learningIndexFor(topicId: String, difficulty: Int = 0): Int {
         if (!loaded) return 0
         return appContext.getSharedPreferences(PrefName, Context.MODE_PRIVATE)
-            .getInt(LearningPrefix + topicId, 0)
+            .getInt(learningKey(topicId, difficulty), 0)
     }
 
-    fun saveLearningIndex(topicId: String, index: Int) {
+    fun saveLearningIndex(topicId: String, index: Int, difficulty: Int = 0) {
         if (!loaded) return
         appContext.getSharedPreferences(PrefName, Context.MODE_PRIVATE)
             .edit()
-            .putInt(LearningPrefix + topicId, index.coerceAtLeast(0))
+            .putInt(learningKey(topicId, difficulty), index.coerceAtLeast(0))
             .apply()
     }
 
@@ -140,6 +140,9 @@ object SpaceWordsStore {
             .apply()
         version.value += 1
     }
+
+    private fun learningKey(topicId: String, difficulty: Int): String =
+        if (difficulty > 0) "$LearningPrefix${topicId}_$difficulty" else LearningPrefix + topicId
 
     private fun encode(progress: WordProgress): String =
         listOf(
