@@ -184,7 +184,8 @@ private fun WordCard(word: VocabWord, topic: Topic, modifier: Modifier = Modifie
             horizontalArrangement = Arrangement.spacedBy(34.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            DefinitionImagePlaceholder(
+            DefinitionImage(
+                word = word,
                 topic = topic,
                 modifier = Modifier
                     .weight(1.18f)
@@ -248,8 +249,9 @@ private fun WordCard(word: VocabWord, topic: Topic, modifier: Modifier = Modifie
 }
 
 @Composable
-private fun DefinitionImagePlaceholder(topic: Topic, modifier: Modifier = Modifier) {
-    Box(
+private fun DefinitionImage(word: VocabWord, topic: Topic, modifier: Modifier = Modifier) {
+    AssetImageOrPlaceholder(
+        assetPath = word.imagePath,
         modifier = modifier
             .clip(RoundedCornerShape(24.dp))
             .background(
@@ -257,10 +259,11 @@ private fun DefinitionImagePlaceholder(topic: Topic, modifier: Modifier = Modifi
                     listOf(topic.tint.copy(alpha = 0.62f), Color.White.copy(alpha = 0.42f))
                 )
             ),
-        contentAlignment = Alignment.Center
+        contentDescription = word.word
     ) {
         Text(
             text = "Definition image placeholder",
+            modifier = Modifier.align(Alignment.Center),
             color = Color.White.copy(alpha = 0.88f),
             fontSize = 17.sp,
             fontWeight = FontWeight.Bold

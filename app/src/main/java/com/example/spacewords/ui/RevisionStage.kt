@@ -35,6 +35,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -190,7 +191,6 @@ fun RevisionStage() {
                         } else {
                             RevisionWordCard(
                                 word = selectedWord,
-                                onClose = closeRevision,
                                 onRemembered = {
                                     RevisionOrbitMotion.hideWord(selectedWord.id)
                                     selectedId = null
@@ -319,80 +319,87 @@ private fun revisionUrgencyColor(priority: Float): Color =
 @Composable
 private fun RevisionWordCard(
     word: VocabWord,
-    onClose: () -> Unit,
     onRemembered: () -> Unit,
     onKeep: () -> Unit
 ) {
     Column(
         modifier = Modifier
-            .size(width = 560.dp, height = 430.dp)
+            .size(width = 700.dp, height = 470.dp)
             .clip(RoundedCornerShape(30.dp))
             .backgroundMaterial(true, Material.Regular)
             .padding(28.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                modifier = Modifier.weight(1f),
-                text = word.word,
-                color = Color(0xFF17202C),
-                fontSize = 46.sp,
-                fontWeight = FontWeight.Bold,
-                textAlign = TextAlign.Center
-            )
-            StageActionButton(
-                onClick = onClose,
-                modifier = Modifier.size(width = 88.dp, height = 48.dp),
-                label = "Close"
-            )
-        }
-        Spacer(Modifier.height(6.dp))
-        Text(text = word.phonetic, color = Color(0xFF657386), fontSize = 20.sp)
-        Spacer(Modifier.height(12.dp))
-        Column(
+        Row(
             modifier = Modifier
-                .weight(1f)
-                .verticalScroll(rememberScrollState()),
-            horizontalAlignment = Alignment.CenterHorizontally
+                .fillMaxWidth()
+                .weight(1f),
+            horizontalArrangement = Arrangement.spacedBy(24.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Box(
+            AssetImageOrPlaceholder(
+                assetPath = word.imagePath,
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .height(86.dp)
+                    .size(300.dp)
                     .clip(RoundedCornerShape(22.dp))
                     .background(Color.White.copy(alpha = 0.28f)),
-                contentAlignment = Alignment.Center
+                contentDescription = word.word,
+                contentScale = ContentScale.Fit
             ) {
                 Text(
                     text = "Definition image placeholder",
+                    modifier = Modifier.align(Alignment.Center),
                     color = Color(0xFF6B7888),
                     fontSize = 15.sp,
                     fontWeight = FontWeight.SemiBold
                 )
             }
-            Spacer(Modifier.height(12.dp))
-            Text(
-                text = word.meaningZh,
-                color = Color(0xFF2C3745),
-                fontSize = 22.sp,
-                fontWeight = FontWeight.SemiBold,
-                textAlign = TextAlign.Center
-            )
-            Spacer(Modifier.height(12.dp))
-            Text(
-                text = word.example,
-                color = Color(0xFF506174),
-                fontSize = 17.sp,
-                textAlign = TextAlign.Center
-            )
-            if (word.exampleZh.isNotBlank()) {
-                Spacer(Modifier.height(8.dp))
-                Text(
-                    text = word.exampleZh,
-                    color = Color(0xFF657386),
-                    fontSize = 15.sp,
-                    textAlign = TextAlign.Center
-                )
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxSize()
+            ) {
+                Column(
+                    modifier = Modifier
+                        .align(Alignment.CenterStart)
+                        .fillMaxWidth()
+                        .verticalScroll(rememberScrollState()),
+                    horizontalAlignment = Alignment.Start
+                ) {
+                    Text(
+                        text = word.word,
+                        color = Color(0xFF17202C),
+                        fontSize = 44.sp,
+                        fontWeight = FontWeight.Bold,
+                        textAlign = TextAlign.Start
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    Text(text = word.phonetic, color = Color(0xFF657386), fontSize = 19.sp)
+                    Spacer(Modifier.height(16.dp))
+                    Text(
+                        text = word.meaningZh,
+                        color = Color(0xFF2C3745),
+                        fontSize = 22.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        textAlign = TextAlign.Start
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    Text(
+                        text = word.example,
+                        color = Color(0xFF506174),
+                        fontSize = 16.sp,
+                        textAlign = TextAlign.Start
+                    )
+                    if (word.exampleZh.isNotBlank()) {
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            text = word.exampleZh,
+                            color = Color(0xFF657386),
+                            fontSize = 15.sp,
+                            textAlign = TextAlign.Start
+                        )
+                    }
+                }
             }
         }
         Spacer(Modifier.height(18.dp))

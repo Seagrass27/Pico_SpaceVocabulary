@@ -19,7 +19,7 @@ data class WordProgress(
 )
 
 object SpaceWordsStore {
-    private const val PrefName = "space_words_progress"
+    private const val PrefName = "space_words_progress_v2"
     private const val RevisionKey = "revision"
     private const val RememberedKey = "remembered"
     private const val MasteredKey = "mastered"

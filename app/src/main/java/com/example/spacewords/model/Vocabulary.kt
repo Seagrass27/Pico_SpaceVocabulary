@@ -26,6 +26,8 @@ data class VocabWord(
 
 private const val VocabJsonAssetPath = "vocab_bundle/vocab.json"
 private const val VocabAssetPrefix = "vocab_bundle/"
+private const val SampleImageAssetDir = "vocab_bundle/sample_images"
+private const val ThemeImageAssetDir = "vocab_bundle/theme_pics"
 
 private val TopicMetas = listOf(
     TopicMeta("food", "FOOD", "Meals, taste, and restaurant words", Color(0xFFE9B85B)),
@@ -72,7 +74,11 @@ fun ensureVocabularyLoaded(context: Context) {
     if (loaded) return
     runCatching {
         val json = context.assets.open(VocabJsonAssetPath).bufferedReader().use { it.readText() }
-        val words = parseWords(JSONArray(json))
+        val sampleImages = context.assets.list(SampleImageAssetDir).orEmpty().toSet()
+        val themeImages = TopicMetas.associate { meta ->
+            meta.id to context.assets.list("$ThemeImageAssetDir/${meta.id}").orEmpty().toSet()
+        }
+        val words = parseWords(JSONArray(json), sampleImages, themeImages)
         topicsCache = TopicMetas.map { meta ->
             Topic(
                 id = meta.id,
@@ -93,26 +99,67 @@ fun findTopic(id: String?): Topic = Topics.firstOrNull { it.id == id } ?: Topics
 
 fun findWord(id: String): VocabWord? = wordsById[id]
 
-private fun parseWords(array: JSONArray): List<VocabWord> =
+private fun parseWords(
+    array: JSONArray,
+    sampleImages: Set<String>,
+    themeImages: Map<String, Set<String>>
+): List<VocabWord> =
     buildList {
         for (index in 0 until array.length()) {
             val item = array.getJSONObject(index)
             val audio = item.optString("audio")
+            val word = item.getString("word")
+            val topicId = item.getString("topic")
+            val image = item.optString("image")
+                .takeIf { it.isNotBlank() }
+                ?.let(::assetPath)
+                ?: themeImagePath(
+                    topicId = topicId,
+                    wordId = item.getString("id"),
+                    word = word,
+                    themeImages = themeImages[topicId].orEmpty()
+                )
+                ?: sampleImagePath(word, sampleImages)
             add(
                 VocabWord(
                     id = item.getString("id"),
-                    topicId = item.getString("topic"),
-                    word = item.getString("word"),
+                    topicId = topicId,
+                    word = word,
                     phonetic = item.optString("phonetic"),
                     meaningZh = item.optString("meaningZh"),
                     example = item.optString("example"),
                     exampleZh = item.optString("exampleZh"),
-                    audioPath = if (audio.isBlank()) "" else VocabAssetPrefix + audio,
-                    imagePath = item.optString("image").takeIf { it.isNotBlank() }
+                    audioPath = if (audio.isBlank()) "" else assetPath(audio),
+                    imagePath = image
                 )
             )
         }
     }
+
+private fun themeImagePath(
+    topicId: String,
+    wordId: String,
+    word: String,
+    themeImages: Set<String>
+): String? {
+    val idFileName = wordId.removePrefix("${topicId}_") + ".png"
+    val candidates = listOf(
+        word.lowercase() + ".png",
+        word.lowercase().replace(" ", "_") + ".png",
+        word.lowercase().replace(" ", "") + ".png",
+        idFileName
+    ).distinct()
+    val fileName = candidates.firstOrNull { it in themeImages } ?: return null
+    return "$ThemeImageAssetDir/$topicId/$fileName"
+}
+
+private fun sampleImagePath(word: String, sampleImages: Set<String>): String? {
+    val fileName = word.lowercase().replace(" ", "_") + ".png"
+    return if (fileName in sampleImages) "$SampleImageAssetDir/$fileName" else null
+}
+
+private fun assetPath(path: String): String =
+    if (path.startsWith(VocabAssetPrefix)) path else VocabAssetPrefix + path
 
 private data class TopicMeta(
     val id: String,
