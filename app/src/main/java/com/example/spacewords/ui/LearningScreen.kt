@@ -40,6 +40,7 @@ import com.example.spacewords.data.SpaceWordsStore
 import com.example.spacewords.data.WordStatus
 import com.example.spacewords.DifficultyBundleKey
 import com.example.spacewords.HomeWindowId
+import com.example.spacewords.RevisionStageId
 import com.example.spacewords.model.Difficulty
 import com.example.spacewords.model.Topic
 import com.example.spacewords.model.VocabWord
@@ -50,6 +51,7 @@ import com.pico.spatial.ui.foundation.hover.spatialHoverEffect
 import com.pico.spatial.ui.foundation.material.backgroundMaterial
 import com.pico.spatial.ui.platform.Material
 import com.pico.spatial.ui.platform.containers.LocalSpatialNavigator
+import com.pico.spatial.ui.platform.containers.StageStyle
 import com.example.spacewords.TopicBundleKey
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.CoroutineScope
@@ -66,21 +68,25 @@ fun LearningScreen(bundle: Bundle?, modifier: Modifier = Modifier) {
     }
     val version by SpaceWordsStore.version
     val difficultyWords = topic.words.filter { it.difficulty == difficulty.level }
-    val learningWords = difficultyWords.filter { SpaceWordsStore.statusFor(it.id) == WordStatus.New }
-    var index by remember(topic.id, difficulty.level) {
-        mutableIntStateOf(SpaceWordsStore.learningIndexFor(topic.id, difficulty.level).coerceAtLeast(0))
+    var batchIds by remember(topic.id, difficulty.level) {
+        mutableStateOf(randomLearningBatch(difficultyWords))
     }
-    val currentIndex = index.coerceIn(0, learningWords.size)
+    var index by remember(topic.id, difficulty.level) { mutableIntStateOf(0) }
     val spatialNavigator = LocalSpatialNavigator.current
-    val currentWord = learningWords.getOrNull(currentIndex)
-    val completedCount = difficultyWords.size - learningWords.size
-    val latestIndex by rememberUpdatedState(currentIndex)
+    val batchWords = batchIds.mapNotNull { wordId -> difficultyWords.firstOrNull { it.id == wordId } }
+    val currentIndex = index.coerceIn(0, batchWords.size)
+    val currentWord = batchWords.getOrNull(currentIndex)
+    val batchCompleted = currentIndex >= batchWords.size
+    val currentPosition = if (batchWords.isEmpty()) 0 else (currentIndex + 1).coerceAtMost(batchWords.size)
+    var restoreHomeOnDispose by remember { mutableStateOf(true) }
+    val latestRestoreHomeOnDispose by rememberUpdatedState(restoreHomeOnDispose)
 
     DisposableEffect(topic.id, difficulty.level) {
         onDispose {
-            SpaceWordsStore.saveLearningIndex(topic.id, latestIndex, difficulty.level)
-            CoroutineScope(Dispatchers.Main).launch {
-                spatialNavigator.restoreWindowContainer(HomeWindowId)
+            if (latestRestoreHomeOnDispose) {
+                CoroutineScope(Dispatchers.Main).launch {
+                    spatialNavigator.restoreWindowContainer(HomeWindowId)
+                }
             }
         }
     }
@@ -91,8 +97,28 @@ fun LearningScreen(bundle: Bundle?, modifier: Modifier = Modifier) {
             .backgroundMaterial(true, Material.Regular)
             .padding(30.dp)
     ) {
-        if (currentWord == null) {
-            CompletionPanel(topic = topic, difficulty = difficulty)
+        if (batchCompleted) {
+            BatchCompleteDialog(
+                hasMoreWords = hasMoreNewWords(difficultyWords),
+                onNextBatch = {
+                    batchIds = randomLearningBatch(difficultyWords)
+                    index = 0
+                },
+                onOtherWords = {
+                    restoreHomeOnDispose = false
+                    CoroutineScope(Dispatchers.Main).launch {
+                        spatialNavigator.restoreWindowContainer(HomeWindowId)
+                        spatialNavigator.closeWindowContainer()
+                    }
+                },
+                onRevision = {
+                    restoreHomeOnDispose = false
+                    CoroutineScope(Dispatchers.Main).launch {
+                        spatialNavigator.openStage(RevisionStageId, style = StageStyle.Mixed)
+                        spatialNavigator.closeWindowContainer()
+                    }
+                }
+            )
         } else {
             Column(
                 modifier = Modifier.fillMaxSize(),
@@ -101,35 +127,33 @@ fun LearningScreen(bundle: Bundle?, modifier: Modifier = Modifier) {
                 LearningHeader(
                     topic = topic,
                     difficulty = difficulty,
-                    currentPosition = (completedCount + 1).coerceAtMost(difficultyWords.size),
-                    total = difficultyWords.size
+                    currentPosition = currentPosition,
+                    total = batchWords.size
                 )
-                WordCard(word = currentWord, topic = topic, modifier = Modifier.weight(1f))
-                Row(horizontalArrangement = Arrangement.spacedBy(18.dp)) {
-                    ActionButton(
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(76.dp),
-                        onClick = {
-                            SpaceWordsStore.putInRevision(currentWord.id)
-                            val nextIndex = currentIndex.coerceAtMost((learningWords.size - 1).coerceAtLeast(0))
-                            index = nextIndex
-                            SpaceWordsStore.saveLearningIndex(topic.id, nextIndex, difficulty.level)
-                        },
-                        label = "Add to Revision"
-                    )
-                    ActionButton(
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(76.dp),
-                        onClick = {
-                            SpaceWordsStore.markRemembered(currentWord.id)
-                            val nextIndex = currentIndex.coerceAtMost((learningWords.size - 1).coerceAtLeast(0))
-                            index = nextIndex
-                            SpaceWordsStore.saveLearningIndex(topic.id, nextIndex, difficulty.level)
-                        },
-                        label = "Remembered"
-                    )
+                currentWord?.let { word ->
+                    WordCard(word = word, topic = topic, modifier = Modifier.weight(1f))
+                    Row(horizontalArrangement = Arrangement.spacedBy(18.dp)) {
+                        ActionButton(
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(76.dp),
+                            onClick = {
+                                SpaceWordsStore.putInRevision(word.id)
+                                index = currentIndex + 1
+                            },
+                            label = "Add to Revision"
+                        )
+                        ActionButton(
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(76.dp),
+                            onClick = {
+                                SpaceWordsStore.markRemembered(word.id)
+                                index = currentIndex + 1
+                            },
+                            label = "Remembered"
+                        )
+                    }
                 }
             }
         }
@@ -151,7 +175,7 @@ private fun LearningHeader(topic: Topic, difficulty: Difficulty, currentPosition
                 Text(text = topic.subtitle, color = Color(0xFF778392), fontSize = 14.sp)
             }
             Text(
-                text = "$currentPosition / $total",
+                text = if (total == 0) "0 / 0" else "$currentPosition / $total",
                 color = Color(0xFF526173),
                 fontSize = 17.sp,
                 fontWeight = FontWeight.SemiBold
@@ -319,6 +343,70 @@ private fun CompletionPanel(topic: Topic, difficulty: Difficulty) {
 }
 
 @Composable
+private fun BatchCompleteDialog(
+    hasMoreWords: Boolean,
+    onNextBatch: () -> Unit,
+    onOtherWords: () -> Unit,
+    onRevision: () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color(0xFF101820).copy(alpha = 0.18f)),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            modifier = Modifier
+                .size(width = 560.dp, height = 360.dp)
+                .clip(RoundedCornerShape(30.dp))
+                .backgroundMaterial(true, Material.Regular)
+                .padding(28.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            Text(
+                text = "Batch complete",
+                color = Color(0xFF1F2733),
+                fontSize = 32.sp,
+                fontWeight = FontWeight.Bold
+            )
+            Spacer(Modifier.height(10.dp))
+            Text(
+                text = "This set of words is finished. Choose what to do next.",
+                color = Color(0xFF6F7B89),
+                fontSize = 17.sp,
+                textAlign = TextAlign.Center
+            )
+            Spacer(Modifier.height(26.dp))
+            ActionButton(
+                onClick = onNextBatch,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(56.dp),
+                label = if (hasMoreWords) "Study Another Batch" else "No New Words"
+            )
+            Spacer(Modifier.height(12.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                ActionButton(
+                    onClick = onOtherWords,
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(56.dp),
+                    label = "Choose Topic"
+                )
+                ActionButton(
+                    onClick = onRevision,
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(56.dp),
+                    label = "Go to Revision"
+                )
+            }
+        }
+    }
+}
+
+@Composable
 private fun ActionButton(onClick: () -> Unit, modifier: Modifier = Modifier, label: String) {
     Box(
         modifier = modifier
@@ -331,3 +419,15 @@ private fun ActionButton(onClick: () -> Unit, modifier: Modifier = Modifier, lab
         Text(text = label, color = Color(0xFF263344), fontSize = 17.sp, fontWeight = FontWeight.Bold)
     }
 }
+
+private const val LearningBatchSize = 10
+
+private fun randomLearningBatch(words: List<VocabWord>): List<String> =
+    words
+        .filter { SpaceWordsStore.statusFor(it.id) == WordStatus.New }
+        .shuffled()
+        .take(LearningBatchSize)
+        .map { it.id }
+
+private fun hasMoreNewWords(words: List<VocabWord>): Boolean =
+    words.any { SpaceWordsStore.statusFor(it.id) == WordStatus.New }
