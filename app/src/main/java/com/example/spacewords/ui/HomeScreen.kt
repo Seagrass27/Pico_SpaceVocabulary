@@ -37,6 +37,7 @@ import com.example.spacewords.R
 import com.example.spacewords.HomeWindowId
 import com.example.spacewords.LearningWindowId
 import com.example.spacewords.LearningWindowTag
+import com.example.spacewords.MasteredWindowId
 import com.example.spacewords.QuizWindowId
 import com.example.spacewords.RevisionStageId
 import com.example.spacewords.TopicBundleKey
@@ -82,9 +83,12 @@ fun HomeScreen(modifier: Modifier = Modifier) {
             Header(
                 selectedDifficulty = selectedDifficulty.value,
                 onDifficultySelected = { selectedDifficulty.value = it },
-                rememberedCount = rememberedCount,
-                revisionCount = revisionCount,
-                masteredCount = masteredCount
+                masteredCount = masteredCount,
+                onMasteredClick = {
+                    coroutineScope.launch {
+                        spatialNavigator.openWindowContainer(id = MasteredWindowId)
+                    }
+                }
             )
             TopicGrid(
                 topics = Topics,
@@ -139,9 +143,8 @@ fun HomeScreen(modifier: Modifier = Modifier) {
 private fun Header(
     selectedDifficulty: Difficulty,
     onDifficultySelected: (Difficulty) -> Unit,
-    rememberedCount: Int,
-    revisionCount: Int,
-    masteredCount: Int
+    masteredCount: Int,
+    onMasteredClick: () -> Unit
 ) {
     Row(
         modifier = Modifier
@@ -169,11 +172,29 @@ private fun Header(
             onDifficultySelected = onDifficultySelected
         )
         Spacer(Modifier.width(24.dp))
+        MasteredEntry(
+            masteredCount = masteredCount,
+            onClick = onMasteredClick
+        )
+    }
+}
+
+@Composable
+private fun MasteredEntry(masteredCount: Int, onClick: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape(18.dp))
+            .background(Color.White.copy(alpha = 0.25f))
+            .clickable(onClick = onClick)
+            .spatialHoverEffect()
+            .padding(horizontal = 18.dp, vertical = 16.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
         Text(
-            text = "$masteredCount mastered  ·  $rememberedCount ready  ·  $revisionCount in revision",
-            color = Color(0xFF516175),
-            fontSize = 17.sp,
-            fontWeight = FontWeight.SemiBold
+            text = "Mastered  $masteredCount words",
+            color = Color(0xFF263344),
+            fontSize = 16.sp,
+            fontWeight = FontWeight.Bold
         )
     }
 }

@@ -118,6 +118,14 @@ object SpaceWordsStore {
         persist()
     }
 
+    fun resetToNew(wordIds: Collection<String>) {
+        var changed = false
+        wordIds.forEach { wordId ->
+            changed = progress.remove(wordId) != null || changed
+        }
+        if (changed) persist()
+    }
+
     private fun persist() {
         if (!loaded) return
         val revision = progress.values

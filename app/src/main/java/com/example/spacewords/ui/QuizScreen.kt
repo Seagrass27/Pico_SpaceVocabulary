@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -35,6 +36,7 @@ import com.pico.spatial.ui.design.Text
 import com.pico.spatial.ui.foundation.hover.spatialHoverEffect
 import com.pico.spatial.ui.foundation.material.backgroundMaterial
 import com.pico.spatial.ui.platform.Material
+import kotlinx.coroutines.delay
 import kotlin.random.Random
 
 @Composable
@@ -49,7 +51,6 @@ fun QuizScreen(modifier: Modifier = Modifier) {
     val masteredCount = remember(version) {
         SpaceWordsStore.masteredWords().count { findWord(it.wordId) != null }
     }
-    var lastResult by remember { mutableStateOf<String?>(null) }
     val currentWord = quizWords.firstOrNull()
 
     Box(
@@ -73,16 +74,8 @@ fun QuizScreen(modifier: Modifier = Modifier) {
                 options = options,
                 remaining = quizWords.size,
                 masteredCount = masteredCount,
-                lastResult = lastResult,
-                onAnswer = { option ->
-                    if (option.isCorrect) {
-                        SpaceWordsStore.markMastered(currentWord.id)
-                        lastResult = "Correct. Added to mastered words."
-                    } else {
-                        SpaceWordsStore.putInRevision(currentWord.id)
-                        lastResult = "Incorrect. Sent back to revision."
-                    }
-                }
+                onCorrect = { SpaceWordsStore.markMastered(currentWord.id) },
+                onIncorrect = { SpaceWordsStore.putInRevision(currentWord.id) }
             )
         }
         version.hashCode()
@@ -96,71 +89,95 @@ private fun QuizPanel(
     options: List<AnswerOption>,
     remaining: Int,
     masteredCount: Int,
-    lastResult: String?,
-    onAnswer: (AnswerOption) -> Unit
+    onCorrect: () -> Unit,
+    onIncorrect: () -> Unit
 ) {
+    var selectedOption by remember(word.id) { mutableStateOf<AnswerOption?>(null) }
+    var showIncorrectDialog by remember(word.id) { mutableStateOf(false) }
+    val answered = selectedOption != null
+
+    LaunchedEffect(word.id, selectedOption) {
+        val selected = selectedOption
+        if (selected?.isCorrect == true) {
+            delay(520)
+            onCorrect()
+        }
+    }
+
     Column(
         modifier = Modifier.fillMaxSize(),
         verticalArrangement = Arrangement.spacedBy(22.dp)
     ) {
         QuizHeader(remaining = remaining, masteredCount = masteredCount)
-        Column(
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(1f)
                 .clip(RoundedCornerShape(30.dp))
                 .background(Color.White.copy(alpha = 0.30f))
-                .padding(30.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
+                .padding(30.dp)
         ) {
-            Text(
-                text = when (questionType) {
-                    QuestionType.WordToMeaning -> "Choose the Chinese meaning"
-                    QuestionType.MeaningToWord -> "Choose the English word"
-                },
-                color = Color(0xFF657386),
-                fontSize = 18.sp,
-                fontWeight = FontWeight.SemiBold
-            )
-            Spacer(Modifier.height(24.dp))
-            Text(
-                text = when (questionType) {
-                    QuestionType.WordToMeaning -> word.word
-                    QuestionType.MeaningToWord -> word.meaningZh
-                },
-                color = Color(0xFF17202C),
-                fontSize = 44.sp,
-                fontWeight = FontWeight.Bold,
-                textAlign = TextAlign.Center
-            )
-            if (questionType == QuestionType.WordToMeaning && word.phonetic.isNotBlank()) {
-                Spacer(Modifier.height(8.dp))
-                Text(text = word.phonetic, color = Color(0xFF6C7B8E), fontSize = 20.sp)
-            }
-            Spacer(Modifier.height(34.dp))
-            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                options.chunked(2).forEach { row ->
-                    Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                        row.forEach { option ->
-                            AnswerButton(
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .height(88.dp),
-                                option = option,
-                                onClick = { onAnswer(option) }
-                            )
+            Column(
+                modifier = Modifier.fillMaxSize(),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(
+                    text = when (questionType) {
+                        QuestionType.WordToMeaning -> "Choose the Chinese meaning"
+                        QuestionType.MeaningToWord -> "Choose the English word"
+                    },
+                    color = Color(0xFF657386),
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Spacer(Modifier.height(24.dp))
+                Text(
+                    text = when (questionType) {
+                        QuestionType.WordToMeaning -> word.word
+                        QuestionType.MeaningToWord -> word.meaningZh
+                    },
+                    color = Color(0xFF17202C),
+                    fontSize = 44.sp,
+                    fontWeight = FontWeight.Bold,
+                    textAlign = TextAlign.Center
+                )
+                if (questionType == QuestionType.WordToMeaning && word.phonetic.isNotBlank()) {
+                    Spacer(Modifier.height(8.dp))
+                    Text(text = word.phonetic, color = Color(0xFF6C7B8E), fontSize = 20.sp)
+                }
+                Spacer(Modifier.height(34.dp))
+                Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                    options.chunked(2).forEach { row ->
+                        Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                            row.forEach { option ->
+                                AnswerButton(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(88.dp),
+                                    option = option,
+                                    state = answerFeedbackState(option = option, selectedOption = selectedOption),
+                                    enabled = !answered,
+                                    onClick = {
+                                        selectedOption = option
+                                        if (!option.isCorrect) {
+                                            showIncorrectDialog = true
+                                        }
+                                    }
+                                )
+                            }
                         }
                     }
                 }
-            }
-            lastResult?.let {
-                Spacer(Modifier.height(22.dp))
-                Text(
-                    text = it,
-                    color = Color(0xFF506174),
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.SemiBold
-                )
+                if (showIncorrectDialog) {
+                    Spacer(Modifier.height(18.dp))
+                    IncorrectAnswerNotice(
+                        word = word,
+                        onContinue = {
+                            showIncorrectDialog = false
+                            onIncorrect()
+                        }
+                    )
+                }
             }
         }
     }
@@ -199,23 +216,88 @@ private fun QuizHeader(remaining: Int, masteredCount: Int) {
 }
 
 @Composable
-private fun AnswerButton(modifier: Modifier, option: AnswerOption, onClick: () -> Unit) {
+private fun AnswerButton(
+    modifier: Modifier,
+    option: AnswerOption,
+    state: AnswerFeedbackState,
+    enabled: Boolean,
+    onClick: () -> Unit
+) {
+    val backgroundColor = when (state) {
+        AnswerFeedbackState.Neutral -> Color.White.copy(alpha = 0.38f)
+        AnswerFeedbackState.NeutralAnswered -> Color.White.copy(alpha = 0.46f)
+        AnswerFeedbackState.Correct -> Color(0xFF8ED6A5).copy(alpha = 0.62f)
+        AnswerFeedbackState.Incorrect -> Color(0xFFEFA29A).copy(alpha = 0.68f)
+    }
+    val textColor = when (state) {
+        AnswerFeedbackState.Neutral,
+        AnswerFeedbackState.NeutralAnswered -> Color(0xFF263344)
+        AnswerFeedbackState.Correct -> Color(0xFF1E5A36)
+        AnswerFeedbackState.Incorrect -> Color(0xFF7B2E29)
+    }
     Box(
         modifier = modifier
             .clip(RoundedCornerShape(20.dp))
-            .background(Color.White.copy(alpha = 0.38f))
-            .clickable(onClick = onClick)
-            .spatialHoverEffect()
+            .background(backgroundColor)
+            .then(if (enabled) Modifier.clickable(onClick = onClick).spatialHoverEffect() else Modifier)
             .padding(horizontal = 18.dp),
         contentAlignment = Alignment.Center
     ) {
         Text(
             text = option.label,
-            color = Color(0xFF263344),
+            color = textColor,
             fontSize = 20.sp,
             fontWeight = FontWeight.SemiBold,
             textAlign = TextAlign.Center
         )
+    }
+}
+
+@Composable
+private fun IncorrectAnswerNotice(word: VocabWord, onContinue: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(22.dp))
+            .background(Color(0xFFFFE1DD).copy(alpha = 0.58f))
+            .padding(horizontal = 18.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .weight(1f),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            Text(
+                text = "Needs Review",
+                color = Color(0xFF7B2E29),
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Bold
+            )
+            Text(
+                text = "\"${word.word}\" will be added back to your revision orbit.",
+                color = Color(0xFF7D5A56),
+                fontSize = 15.sp
+            )
+        }
+        Box(
+            modifier = Modifier
+                .height(48.dp)
+                .clip(RoundedCornerShape(16.dp))
+                .background(Color.White.copy(alpha = 0.48f))
+                .clickable(onClick = onContinue)
+                .spatialHoverEffect()
+                .padding(horizontal = 26.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = "Continue",
+                color = Color(0xFF263344),
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Bold
+            )
+        }
     }
 }
 
@@ -277,3 +359,18 @@ private data class AnswerOption(
     val label: String,
     val isCorrect: Boolean
 )
+
+private enum class AnswerFeedbackState {
+    Neutral,
+    NeutralAnswered,
+    Correct,
+    Incorrect
+}
+
+private fun answerFeedbackState(option: AnswerOption, selectedOption: AnswerOption?): AnswerFeedbackState =
+    when {
+        selectedOption == null -> AnswerFeedbackState.Neutral
+        option.isCorrect -> AnswerFeedbackState.Correct
+        option == selectedOption -> AnswerFeedbackState.Incorrect
+        else -> AnswerFeedbackState.NeutralAnswered
+    }
