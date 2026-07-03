@@ -9,6 +9,9 @@ import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.waitForUpOrCancellation
+import androidx.compose.foundation.hoverable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -24,6 +27,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
@@ -32,7 +36,9 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
@@ -64,6 +70,7 @@ import com.pico.spatial.ui.foundation.hover.spatialHoverEffect
 import com.pico.spatial.ui.foundation.material.backgroundMaterial
 import com.pico.spatial.ui.platform.Material
 import com.pico.spatial.ui.platform.containers.LocalSpatialNavigator
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.PI
 import kotlin.math.cos
@@ -235,19 +242,37 @@ private fun OrbitWordTag(word: VocabWord, onClick: () -> Unit) {
     val context = LocalContext.current
     val shape = RoundedCornerShape(24.dp)
     val accentColor = revisionTopicColor(word.topicId)
-    val borderColor = accentColor.copy(alpha = 0.72f)
+    val interactionSource = remember { MutableInteractionSource() }
+    val isHovered by interactionSource.collectIsHoveredAsState()
+    val focusedWordId by RevisionOrbitMotion.hoverFocusedWordId
+    val isFocused = focusedWordId == word.id
+    val isDimmed = focusedWordId != null && !isFocused
+    val borderColor = accentColor.copy(alpha = if (isFocused) 0.96f else 0.72f)
+
+    LaunchedEffect(isHovered, word.id) {
+        if (isHovered) {
+            delay(HoverFocusDelayMs)
+            RevisionOrbitMotion.focusFromHover(word.id)
+        } else {
+            RevisionOrbitMotion.clearHoverFocus(word.id)
+        }
+    }
+
     Box(
         modifier = Modifier
             .size(width = 280.dp, height = 112.dp)
+            .scale(if (isFocused) 1.16f else 1f)
+            .alpha(if (isDimmed) 0.38f else 1f)
             .shadow(
-                elevation = 12.dp,
+                elevation = if (isFocused) 22.dp else 12.dp,
                 shape = shape,
-                ambientColor = accentColor.copy(alpha = 0.26f),
-                spotColor = accentColor.copy(alpha = 0.22f)
+                ambientColor = accentColor.copy(alpha = if (isFocused) 0.46f else 0.26f),
+                spotColor = accentColor.copy(alpha = if (isFocused) 0.40f else 0.22f)
             )
             .clip(shape)
-            .background(Color.White.copy(alpha = 0.44f))
-            .border(width = 1.5.dp, color = borderColor, shape = shape)
+            .background(Color.White.copy(alpha = if (isFocused) 0.58f else 0.44f))
+            .border(width = if (isFocused) 2.2.dp else 1.5.dp, color = borderColor, shape = shape)
+            .hoverable(interactionSource = interactionSource)
             .pointerInput(word.id) {
                 awaitEachGesture {
                     awaitFirstDown(requireUnconsumed = false)
@@ -270,6 +295,9 @@ private fun OrbitWordTag(word: VocabWord, onClick: () -> Unit) {
             .pointerInput(word.id, context) {
                 var pointerPressed = false
                 detectSpatialPointerEvent(context = context) { eventList ->
+                    if (eventList.isNotEmpty()) {
+                        RevisionOrbitMotion.noteSpatialPointerOver(word.id)
+                    }
                     val isPressed = eventList.any { it.pressed }
                     if (isPressed && !pointerPressed) {
                         RevisionOrbitMotion.startDrag()
@@ -302,13 +330,13 @@ private fun OrbitWordTag(word: VocabWord, onClick: () -> Unit) {
             modifier = Modifier
                 .fillMaxSize()
                 .clip(shape)
-                .background(accentColor.copy(alpha = 0.20f)),
+                .background(accentColor.copy(alpha = if (isFocused) 0.32f else 0.20f)),
             contentAlignment = Alignment.Center
         ) {
             Text(
                 text = word.word,
-                color = Color(0xFF263344).copy(alpha = 0.92f),
-                fontSize = 32.sp,
+                color = Color(0xFF263344).copy(alpha = if (isDimmed) 0.72f else 0.96f),
+                fontSize = if (isFocused) 34.sp else 32.sp,
                 fontWeight = FontWeight.Bold,
                 textAlign = TextAlign.Center
             )
@@ -527,7 +555,7 @@ private fun normalizeDegrees(degrees: Float): Float =
 private fun shortestDegreeDelta(from: Float, to: Float): Float =
     ((to - from + 540f) % 360f) - 180f
 
-private const val OrbitAngularSpeedDegPerSecond = 6f
+private const val OrbitAngularSpeedDegPerSecond = 4.2f
 private const val OrbitCenterY = 1.42f
 private const val DragActivationPx = 5f
 private const val PreDragNoiseDeadZonePx = 0.35f
@@ -542,6 +570,8 @@ private const val FlingMinVelocityDegPerSecond = 18f
 private const val DragDeltaSmoothing = 0.35f
 private const val SpatialPressReleaseDebounceMs = 90L
 private const val DragFollowRatePerSecond = 18f
+private const val HoverFocusDelayMs = 650L
+private const val SpatialPointerHoverFocusDelayMs = 720L
 
 class RevisionOrbitComponent(
     var wordId: String = "",
@@ -571,6 +601,8 @@ class RevisionOrbitSystem : SpatialSystem() {
 }
 
 private object RevisionOrbitMotion {
+    val hoverFocusedWordId = mutableStateOf<String?>(null)
+
     private var baseOffsetDeg = 0f
     private var runningSinceMs = SystemClock.elapsedRealtime()
     private var lastMotionMs = runningSinceMs
@@ -585,6 +617,8 @@ private object RevisionOrbitMotion {
     private var pendingPressReleaseMs: Long? = null
     private var tapAllowed = false
     private var paused = false
+    private var spatialHoverWordId: String? = null
+    private var spatialHoverStartedMs = 0L
     private val hiddenWordIds = mutableSetOf<String>()
 
     fun reset() {
@@ -602,6 +636,9 @@ private object RevisionOrbitMotion {
         pendingPressReleaseMs = null
         tapAllowed = false
         paused = false
+        spatialHoverWordId = null
+        spatialHoverStartedMs = 0L
+        hoverFocusedWordId.value = null
         hiddenWordIds.clear()
     }
 
@@ -613,6 +650,7 @@ private object RevisionOrbitMotion {
     fun startDrag() {
         if (paused) return
         if (userDragging) return
+        clearHoverFocus()
         baseOffsetDeg = currentOffsetDeg()
         val now = SystemClock.elapsedRealtime()
         userVelocityDegPerSecond = 0f
@@ -729,12 +767,14 @@ private object RevisionOrbitMotion {
             dragTargetOffsetDeg = baseOffsetDeg
             pendingPressReleaseMs = null
             tapAllowed = false
+            clearHoverFocus()
             paused = true
         }
     }
 
     fun resume() {
         if (paused) {
+            clearHoverFocus()
             runningSinceMs = SystemClock.elapsedRealtime()
             lastMotionMs = runningSinceMs
             paused = false
@@ -742,14 +782,49 @@ private object RevisionOrbitMotion {
     }
 
     fun hideWord(wordId: String) {
+        if (hoverFocusedWordId.value == wordId) {
+            clearHoverFocus()
+        }
         hiddenWordIds.add(wordId)
     }
 
     fun isHidden(wordId: String): Boolean = hiddenWordIds.contains(wordId)
 
+    fun focusFromHover(wordId: String) {
+        if (paused || userDragging || isHidden(wordId)) return
+        baseOffsetDeg = currentOffsetDeg()
+        userVelocityDegPerSecond = 0f
+        hoverFocusedWordId.value = wordId
+        lastMotionMs = SystemClock.elapsedRealtime()
+    }
+
+    fun clearHoverFocus(wordId: String? = null) {
+        if (wordId == null || hoverFocusedWordId.value == wordId) {
+            hoverFocusedWordId.value = null
+            spatialHoverWordId = null
+            spatialHoverStartedMs = 0L
+            val now = SystemClock.elapsedRealtime()
+            runningSinceMs = now
+            lastMotionMs = now
+        }
+    }
+
+    fun noteSpatialPointerOver(wordId: String) {
+        if (paused || userDragging || isHidden(wordId)) return
+        val now = SystemClock.elapsedRealtime()
+        if (spatialHoverWordId != wordId) {
+            spatialHoverWordId = wordId
+            spatialHoverStartedMs = now
+            return
+        }
+        if (hoverFocusedWordId.value == null && now - spatialHoverStartedMs >= SpatialPointerHoverFocusDelayMs) {
+            focusFromHover(wordId)
+        }
+    }
+
     private fun updateMotion() {
         val now = SystemClock.elapsedRealtime()
-        if (paused) {
+        if (paused || hoverFocusedWordId.value != null) {
             lastMotionMs = now
             return
         }

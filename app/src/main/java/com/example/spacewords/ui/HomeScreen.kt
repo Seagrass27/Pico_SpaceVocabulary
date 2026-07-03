@@ -51,6 +51,7 @@ import com.example.spacewords.model.ensureVocabularyLoaded
 import com.example.spacewords.model.findWord
 import com.pico.spatial.ui.design.Text
 import com.pico.spatial.ui.foundation.hover.spatialHoverEffect
+import com.pico.spatial.ui.foundation.layout.zOffset
 import com.pico.spatial.ui.foundation.material.backgroundMaterial
 import com.pico.spatial.ui.platform.Material
 import com.pico.spatial.ui.platform.containers.LocalSpatialNavigator
@@ -150,6 +151,7 @@ private fun Header(
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .zOffset { HomeFloatingOffset.toPx() }
             .clip(RoundedCornerShape(24.dp))
             .background(Color.White.copy(alpha = 0.34f))
             .padding(horizontal = 26.dp, vertical = 22.dp),
@@ -264,6 +266,7 @@ private fun TopicTile(modifier: Modifier, topic: Topic, difficulty: Difficulty, 
     Box(
         modifier = modifier
             .aspectRatio(16f / 9f)
+            .zOffset { HomeFloatingOffset.toPx() }
             .clip(shape)
             .clickable(onClick = onClick)
             .spatialHoverEffect()
@@ -355,6 +358,7 @@ private fun WideActionPanel(
     Box(
         modifier = modifier
             .height(120.dp)
+            .zOffset { HomeFloatingOffset.toPx() }
             .clip(RoundedCornerShape(24.dp))
             .then(if (enabled) Modifier.clickable(onClick = onClick).spatialHoverEffect() else Modifier)
     ) {
@@ -386,3 +390,5 @@ private fun WideActionPanel(
         }
     }
 }
+
+private val HomeFloatingOffset = 18.dp
