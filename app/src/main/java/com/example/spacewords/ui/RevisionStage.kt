@@ -3,7 +3,6 @@ package com.example.spacewords.ui
 import android.os.SystemClock
 import android.media.MediaPlayer
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
@@ -87,11 +86,17 @@ fun RevisionStage() {
     val orbitWords = revision.mapNotNull { progress ->
         findWord(progress.wordId)?.let { OrbitWord(it, progress) }
     }
-    val distanceByWordId = orbitWords.mapIndexed { index, orbitWord ->
-        orbitWord.word.id to orbitDistance(index = index, count = orbitWords.size)
+    val visibleOrbitWords = Difficulty.entries.flatMap { difficulty ->
+        orbitWords
+            .filter { it.word.difficulty == difficulty.level }
+            .sortedBy { it.progress.addedAt }
+            .take(MaxRevisionWordsPerTrack)
+    }
+    val distanceByWordId = visibleOrbitWords.sortedBy { it.progress.addedAt }.mapIndexed { index, orbitWord ->
+        orbitWord.word.id to orbitDistance(index = index, count = visibleOrbitWords.size)
     }.toMap()
     val orbitItems = Difficulty.entries.flatMap { difficulty ->
-        val laneWords = orbitWords.filter { it.word.difficulty == difficulty.level }
+        val laneWords = visibleOrbitWords.filter { it.word.difficulty == difficulty.level }
         laneWords.mapIndexed { laneIndex, orbitWord ->
             val angle = orbitAngle(index = laneIndex, count = laneWords.size) + orbitAngleOffset(difficulty)
             val distance = distanceByWordId[orbitWord.word.id] ?: orbitDistance(index = laneIndex, count = laneWords.size)
@@ -124,6 +129,10 @@ fun RevisionStage() {
         Unit
     }
 
+    LaunchedEffect(Unit) {
+        spatialNavigator.minimizeWindowContainer(HomeWindowId)
+    }
+
     DisposableEffect(Unit) {
         RevisionOrbitMotion.reset()
         SpatialSystem.register(RevisionOrbitSystem::class.java)
@@ -153,12 +162,14 @@ fun RevisionStage() {
                                 )
                             )
                             attachment.components[TransformComponent::class.java]?.setPosition(item.position)
-                            attachment.components[TransformComponent::class.java]?.setEulerAngles(faceCenterEuler(item.angle))
+                            attachment.components[TransformComponent::class.java]?.setEulerAngles(faceCenterEuler(item.angle, item.y))
                             content.addEntity(attachment)
                         }
                     }
                     attachments.entity(id = "close-revision")?.let { close ->
-                        close.components[TransformComponent::class.java]?.setPosition(Vector3(0.78f, 2.05f, -0.9f))
+                        val closePosition = Vector3(0.78f, 1.48f, -0.9f)
+                        close.components[TransformComponent::class.java]?.setPosition(closePosition)
+                        close.components[TransformComponent::class.java]?.setEulerAngles(faceCenterEuler(angleForPosition(closePosition), closePosition.y))
                         content.addEntity(close)
                     }
                 },
@@ -191,18 +202,19 @@ fun RevisionStage() {
                     attachments.entity(id = "selected-card")?.let { card ->
                         val item = selectedItem
                         if (item == null) {
-                            card.components[TransformComponent::class.java]?.setPosition(Vector3(0f, 1.55f, -0.86f))
-                            card.components[TransformComponent::class.java]?.setEulerAngles(EulerAngles(0f, 0f, 0f))
+                            card.components[TransformComponent::class.java]?.setPosition(Vector3(0f, 1.18f, -0.86f))
+                            card.components[TransformComponent::class.java]?.setEulerAngles(faceCenterEuler(0f, 1.18f))
                         } else {
                             val angle = animatedOrbitAngle(item, RevisionOrbitMotion.currentOffsetDeg())
+                            val cardY = item.y + 0.08f
                             card.components[TransformComponent::class.java]?.setPosition(
                                 orbitPosition(
                                     angle = angle,
-                                    distance = (item.horizontalDistance - 0.12f).coerceAtLeast(0.58f),
-                                    y = item.y + 0.08f
+                                    distance = (item.horizontalDistance - 0.04f).coerceAtLeast(0.82f),
+                                    y = cardY
                                 )
                             )
-                            card.components[TransformComponent::class.java]?.setEulerAngles(faceCenterEuler(angle))
+                            card.components[TransformComponent::class.java]?.setEulerAngles(faceCenterEuler(angle, cardY))
                         }
                         content.addEntity(card)
                     }
@@ -247,7 +259,6 @@ private fun OrbitWordTag(word: VocabWord, onClick: () -> Unit) {
     val focusedWordId by RevisionOrbitMotion.hoverFocusedWordId
     val isFocused = focusedWordId == word.id
     val isDimmed = focusedWordId != null && !isFocused
-    val borderColor = accentColor.copy(alpha = if (isFocused) 0.96f else 0.72f)
 
     LaunchedEffect(isHovered, word.id) {
         if (isHovered) {
@@ -271,7 +282,6 @@ private fun OrbitWordTag(word: VocabWord, onClick: () -> Unit) {
             )
             .clip(shape)
             .background(Color.White.copy(alpha = if (isFocused) 0.58f else 0.44f))
-            .border(width = if (isFocused) 2.2.dp else 1.5.dp, color = borderColor, shape = shape)
             .hoverable(interactionSource = interactionSource)
             .pointerInput(word.id) {
                 awaitEachGesture {
@@ -506,9 +516,9 @@ private data class OrbitItem(
 )
 
 private fun orbitDistance(index: Int, count: Int): Float {
-    if (count <= 1) return 0.72f
+    if (count <= 1) return 0.92f
     val normalized = index.toFloat() / (count - 1).toFloat()
-    return 0.72f + normalized * 0.58f
+    return 0.92f + normalized * 0.58f
 }
 
 private fun orbitAngle(index: Int, count: Int): Float {
@@ -519,13 +529,13 @@ private fun orbitAngle(index: Int, count: Int): Float {
 
 private fun orbitTrackY(difficulty: Difficulty): Float =
     when (difficulty) {
-        Difficulty.Advanced -> 1.78f
-        Difficulty.Intermediate -> 1.42f
-        Difficulty.Beginner -> 1.06f
+        Difficulty.Advanced -> 1.14f
+        Difficulty.Intermediate -> 1.00f
+        Difficulty.Beginner -> 0.86f
     }
 
 private fun horizontalOrbitDistance(distance: Float, y: Float): Float {
-    val verticalDelta = y - OrbitCenterY
+    val verticalDelta = y - OrbitViewReferenceY
     return sqrt((distance * distance - verticalDelta * verticalDelta).coerceAtLeast(0.38f * 0.38f))
 }
 
@@ -543,8 +553,14 @@ private fun orbitPosition(angle: Float, distance: Float, y: Float): Vector3 =
         -cos(angle) * distance
     )
 
-private fun faceCenterEuler(angle: Float): EulerAngles =
-    EulerAngles(0f, normalizeDegrees(360f - angle * 180f / PI.toFloat()), 0f)
+private fun angleForPosition(position: Vector3): Float =
+    kotlin.math.atan2(position.x, -position.z)
+
+private fun faceCenterEuler(angle: Float, y: Float): EulerAngles =
+    EulerAngles(orbitPitchForY(y), normalizeDegrees(360f - angle * 180f / PI.toFloat()), 0f)
+
+private fun orbitPitchForY(y: Float): Float =
+    ((y - OrbitPitchReferenceY) * OrbitPitchDegreesPerMeter).coerceIn(-12f, 12f)
 
 private fun animatedOrbitAngle(item: OrbitItem, orbitOffsetDeg: Float): Float =
     item.angle + orbitOffsetDeg * PI.toFloat() / 180f
@@ -556,7 +572,10 @@ private fun shortestDegreeDelta(from: Float, to: Float): Float =
     ((to - from + 540f) % 360f) - 180f
 
 private const val OrbitAngularSpeedDegPerSecond = 4.2f
-private const val OrbitCenterY = 1.42f
+private const val OrbitViewReferenceY = 1.36f
+private const val OrbitPitchReferenceY = 1.00f
+private const val OrbitPitchDegreesPerMeter = 30f
+private const val MaxRevisionWordsPerTrack = 10
 private const val DragActivationPx = 5f
 private const val PreDragNoiseDeadZonePx = 0.35f
 private const val ActiveDragDeadZonePx = 0.18f
@@ -594,7 +613,7 @@ class RevisionOrbitSystem : SpatialSystem() {
             val angle = orbit.baseAngle + orbitOffsetDeg * PI.toFloat() / 180f
             entity.components[TransformComponent::class.java]?.apply {
                 setPosition(orbitPosition(angle = angle, distance = orbit.distance, y = orbit.y))
-                setEulerAngles(faceCenterEuler(angle))
+                setEulerAngles(faceCenterEuler(angle, orbit.y))
             }
         }
     }
@@ -870,7 +889,7 @@ private object RevisionOrbitMotion {
 
 private fun stableYOffset(wordId: String): Float {
     val normalized = (wordId.hashCode() and 0xFFFF) / 65535f
-    return (normalized - 0.5f) * 0.08f
+    return (normalized - 0.5f) * 0.04f
 }
 
 @Composable
