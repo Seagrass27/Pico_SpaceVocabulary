@@ -43,6 +43,7 @@ import com.example.spacewords.RevisionStageId
 import com.example.spacewords.TopicBundleKey
 import com.example.spacewords.DifficultyBundleKey
 import com.example.spacewords.data.SpaceWordsStore
+import com.example.spacewords.data.WordStatus
 import com.example.spacewords.model.Difficulty
 import com.example.spacewords.model.Topic
 import com.example.spacewords.model.Topics
@@ -257,7 +258,9 @@ private fun TopicGrid(topics: List<Topic>, difficulty: Difficulty, onTopicSelect
 @Composable
 private fun TopicTile(modifier: Modifier, topic: Topic, difficulty: Difficulty, onClick: () -> Unit) {
     val shape = RoundedCornerShape(22.dp)
-    val difficultyWordCount = topic.words.count { it.difficulty == difficulty.level }
+    val waitingWordCount = topic.words.count {
+        it.difficulty == difficulty.level && SpaceWordsStore.statusFor(it.id) == WordStatus.New
+    }
     Box(
         modifier = modifier
             .aspectRatio(16f / 9f)
@@ -295,7 +298,7 @@ private fun TopicTile(modifier: Modifier, topic: Topic, difficulty: Difficulty, 
                     fontWeight = FontWeight.SemiBold
                 )
                 ShadowedText(
-                    text = "$difficultyWordCount words",
+                    text = "$waitingWordCount to learn",
                     color = Color.White.copy(alpha = 0.72f),
                     fontSize = 12,
                     fontWeight = FontWeight.Medium

@@ -11,6 +11,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -29,8 +31,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.spacewords.data.SpaceWordsStore
 import com.example.spacewords.model.AllWords
+import com.example.spacewords.model.Difficulty
 import com.example.spacewords.model.VocabWord
 import com.example.spacewords.model.ensureVocabularyLoaded
+import com.example.spacewords.model.findTopic
 import com.example.spacewords.model.findWord
 import com.pico.spatial.ui.design.Text
 import com.pico.spatial.ui.foundation.hover.spatialHoverEffect
@@ -51,7 +55,10 @@ fun QuizScreen(modifier: Modifier = Modifier) {
     val masteredCount = remember(version) {
         SpaceWordsStore.masteredWords().count { findWord(it.wordId) != null }
     }
-    val currentWord = quizWords.firstOrNull()
+    var quizQueue by remember {
+        mutableStateOf(quizWords.shuffled())
+    }
+    val currentWord = quizQueue.firstOrNull()
 
     Box(
         modifier = modifier
@@ -72,10 +79,16 @@ fun QuizScreen(modifier: Modifier = Modifier) {
                 word = currentWord,
                 questionType = questionType,
                 options = options,
-                remaining = quizWords.size,
+                remaining = quizQueue.size,
                 masteredCount = masteredCount,
-                onCorrect = { SpaceWordsStore.markMastered(currentWord.id) },
-                onIncorrect = { SpaceWordsStore.putInRevision(currentWord.id) }
+                onCorrect = {
+                    quizQueue = quizQueue.drop(1)
+                    SpaceWordsStore.markMastered(currentWord.id)
+                },
+                onIncorrect = {
+                    quizQueue = quizQueue.drop(1)
+                    SpaceWordsStore.putInRevision(currentWord.id)
+                }
             )
         }
         version.hashCode()
@@ -141,6 +154,8 @@ private fun QuizPanel(
                     fontWeight = FontWeight.Bold,
                     textAlign = TextAlign.Center
                 )
+                Spacer(Modifier.height(12.dp))
+                WordMetaBadges(word = word)
                 if (questionType == QuestionType.WordToMeaning && word.phonetic.isNotBlank()) {
                     Spacer(Modifier.height(8.dp))
                     Text(text = word.phonetic, color = Color(0xFF6C7B8E), fontSize = 20.sp)
@@ -214,6 +229,48 @@ private fun QuizHeader(remaining: Int, masteredCount: Int) {
         )
     }
 }
+
+@Composable
+private fun WordMetaBadges(word: VocabWord) {
+    val topic = findTopic(word.topicId)
+    val difficulty = Difficulty.fromLevel(word.difficulty)
+    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        MetaBadge(label = topic.title, color = topic.tint)
+        MetaBadge(label = difficulty.label, color = difficultyColor(difficulty))
+    }
+}
+
+@Composable
+private fun MetaBadge(label: String, color: Color) {
+    Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape(14.dp))
+            .background(Color.White.copy(alpha = 0.34f))
+            .padding(horizontal = 10.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier
+                .size(10.dp)
+                .clip(RoundedCornerShape(5.dp))
+                .background(color.copy(alpha = 0.86f))
+        )
+        Spacer(Modifier.width(7.dp))
+        Text(
+            text = label,
+            color = Color(0xFF526173),
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Bold
+        )
+    }
+}
+
+private fun difficultyColor(difficulty: Difficulty): Color =
+    when (difficulty) {
+        Difficulty.Beginner -> Color(0xFF7E9F72)
+        Difficulty.Intermediate -> Color(0xFFC4A35F)
+        Difficulty.Advanced -> Color(0xFFB58BA6)
+    }
 
 @Composable
 private fun AnswerButton(
