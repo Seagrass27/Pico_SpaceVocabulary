@@ -39,6 +39,7 @@ import com.example.spacewords.model.ensureVocabularyLoaded
 import com.example.spacewords.model.findWord
 import com.pico.spatial.ui.design.Text
 import com.pico.spatial.ui.foundation.hover.spatialHoverEffect
+import com.pico.spatial.ui.foundation.layout.zOffset
 import com.pico.spatial.ui.foundation.material.backgroundMaterial
 import com.pico.spatial.ui.platform.Material
 
@@ -115,6 +116,7 @@ private fun MasteredHeader(total: Int) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .zOffset { MasteredCardFloatingOffset.toPx() }
             .clip(RoundedCornerShape(24.dp))
             .background(Color.White.copy(alpha = 0.34f))
             .padding(horizontal = 26.dp, vertical = 22.dp),
@@ -152,6 +154,7 @@ private fun MasteredTopicRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .zOffset { MasteredCardFloatingOffset.toPx() }
             .clip(RoundedCornerShape(24.dp))
             .background(Color.White.copy(alpha = 0.27f))
             .clickable(onClick = onOpen)
@@ -212,6 +215,7 @@ private fun MasteredTopicDetail(topic: Topic, words: List<VocabWord>, onBack: ()
         Row(
             modifier = Modifier
                 .fillMaxWidth()
+                .zOffset { MasteredCardFloatingOffset.toPx() }
                 .clip(RoundedCornerShape(24.dp))
                 .background(Color.White.copy(alpha = 0.34f))
                 .padding(horizontal = 24.dp, vertical = 20.dp),
@@ -261,6 +265,7 @@ private fun DifficultyWordSection(difficulty: Difficulty, words: List<VocabWord>
     Column(
         modifier = Modifier
             .fillMaxWidth()
+            .zOffset { MasteredCardFloatingOffset.toPx() }
             .clip(RoundedCornerShape(24.dp))
             .background(Color.White.copy(alpha = 0.27f))
             .padding(22.dp),
@@ -363,6 +368,7 @@ private fun ResetConfirmDialog(
         Column(
             modifier = Modifier
                 .width(560.dp)
+                .zOffset { MasteredCardFloatingOffset.toPx() }
                 .clip(RoundedCornerShape(30.dp))
                 .backgroundMaterial(true, Material.Regular)
                 .padding(28.dp),
@@ -454,3 +460,5 @@ private fun difficultySummary(words: List<VocabWord>): String =
     Difficulty.entries.joinToString("  ·  ") { difficulty ->
         "${difficulty.label} ${words.count { it.difficulty == difficulty.level }}"
     }
+
+private val MasteredCardFloatingOffset = 10.dp

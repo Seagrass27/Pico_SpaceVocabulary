@@ -72,6 +72,7 @@ import com.pico.spatial.ui.platform.containers.LocalSpatialNavigator
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.PI
+import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.sin
 import kotlin.math.sqrt
@@ -119,6 +120,15 @@ fun RevisionStage() {
     var selectedId by remember { mutableStateOf<String?>(null) }
     val selectedItem = selectedId?.let { id -> orbitItems.firstOrNull { it.orbitWord.word.id == id } }
     val selectedWord = selectedItem?.orbitWord?.word
+    val occludedWordIds = remember(selectedId, orbitItems) {
+        selectedItem?.let { selected ->
+            occludedWordsForSelectedCard(
+                selected = selected,
+                orbitItems = orbitItems,
+                orbitOffsetDeg = RevisionOrbitMotion.currentOffsetDeg()
+            )
+        }.orEmpty()
+    }
     val spatialNavigator = LocalSpatialNavigator.current
     val coroutineScope = rememberCoroutineScope()
     val closeRevision = {
@@ -176,13 +186,17 @@ fun RevisionStage() {
                 attachments = {
                     orbitItems.forEach { item ->
                         AttachmentPanel(id = tagId(item.orbitWord.word.id)) {
-                            OrbitWordTag(
-                                word = item.orbitWord.word,
-                                onClick = {
-                                    RevisionOrbitMotion.pause()
-                                    selectedId = item.orbitWord.word.id
-                                }
-                            )
+                            if (occludedWordIds.contains(item.orbitWord.word.id)) {
+                                HiddenPanel()
+                            } else {
+                                OrbitWordTag(
+                                    word = item.orbitWord.word,
+                                    onClick = {
+                                        RevisionOrbitMotion.pause()
+                                        selectedId = item.orbitWord.word.id
+                                    }
+                                )
+                            }
                         }
                     }
                     AttachmentPanel(id = "close-revision") {
@@ -210,7 +224,7 @@ fun RevisionStage() {
                             card.components[TransformComponent::class.java]?.setPosition(
                                 orbitPosition(
                                     angle = angle,
-                                    distance = (item.horizontalDistance - 0.04f).coerceAtLeast(0.82f),
+                                    distance = selectedCardDistance(item),
                                     y = cardY
                                 )
                             )
@@ -259,6 +273,10 @@ private fun OrbitWordTag(word: VocabWord, onClick: () -> Unit) {
     val focusedWordId by RevisionOrbitMotion.hoverFocusedWordId
     val isFocused = focusedWordId == word.id
     val isDimmed = focusedWordId != null && !isFocused
+    val cardAlpha = when {
+        isDimmed -> 0.38f
+        else -> 1f
+    }
 
     LaunchedEffect(isHovered, word.id) {
         if (isHovered) {
@@ -273,7 +291,7 @@ private fun OrbitWordTag(word: VocabWord, onClick: () -> Unit) {
         modifier = Modifier
             .size(width = 280.dp, height = 112.dp)
             .scale(if (isFocused) 1.16f else 1f)
-            .alpha(if (isDimmed) 0.38f else 1f)
+            .alpha(cardAlpha)
             .shadow(
                 elevation = if (isFocused) 22.dp else 12.dp,
                 shape = shape,
@@ -565,6 +583,33 @@ private fun orbitPitchForY(y: Float): Float =
 private fun animatedOrbitAngle(item: OrbitItem, orbitOffsetDeg: Float): Float =
     item.angle + orbitOffsetDeg * PI.toFloat() / 180f
 
+private fun selectedCardDistance(item: OrbitItem): Float =
+    (item.horizontalDistance - 0.10f).coerceAtLeast(0.78f)
+
+private fun occludedWordsForSelectedCard(
+    selected: OrbitItem,
+    orbitItems: List<OrbitItem>,
+    orbitOffsetDeg: Float
+): Set<String> {
+    val selectedAngle = animatedOrbitAngle(selected, orbitOffsetDeg)
+    val selectedDistance = selectedCardDistance(selected)
+    val selectedY = selected.y + 0.08f
+    return orbitItems
+        .filter { item ->
+            item.orbitWord.word.id != selected.orbitWord.word.id &&
+                item.horizontalDistance < selectedDistance + OcclusionDistanceMargin &&
+                abs(shortestRadianDelta(selectedAngle, animatedOrbitAngle(item, orbitOffsetDeg))) < OcclusionAngleThresholdRad &&
+                abs((item.y + stableYOffset(item.orbitWord.word.id)) - selectedY) < OcclusionHeightThreshold
+        }
+        .map { it.orbitWord.word.id }
+        .toSet()
+}
+
+private fun shortestRadianDelta(from: Float, to: Float): Float {
+    val twoPi = 2f * PI.toFloat()
+    return ((to - from + 3f * PI.toFloat()) % twoPi) - PI.toFloat()
+}
+
 private fun normalizeDegrees(degrees: Float): Float =
     ((degrees % 360f) + 360f) % 360f
 
@@ -591,6 +636,9 @@ private const val SpatialPressReleaseDebounceMs = 90L
 private const val DragFollowRatePerSecond = 18f
 private const val HoverFocusDelayMs = 650L
 private const val SpatialPointerHoverFocusDelayMs = 720L
+private const val OcclusionDistanceMargin = 0.03f
+private const val OcclusionAngleThresholdRad = 0.44f
+private const val OcclusionHeightThreshold = 0.34f
 
 class RevisionOrbitComponent(
     var wordId: String = "",

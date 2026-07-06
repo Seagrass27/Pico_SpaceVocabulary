@@ -38,6 +38,7 @@ import com.example.spacewords.model.findTopic
 import com.example.spacewords.model.findWord
 import com.pico.spatial.ui.design.Text
 import com.pico.spatial.ui.foundation.hover.spatialHoverEffect
+import com.pico.spatial.ui.foundation.layout.zOffset
 import com.pico.spatial.ui.foundation.material.backgroundMaterial
 import com.pico.spatial.ui.platform.Material
 import kotlinx.coroutines.delay
@@ -126,6 +127,7 @@ private fun QuizPanel(
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(1f)
+                .zOffset { QuizCardFloatingOffset.toPx() }
                 .clip(RoundedCornerShape(30.dp))
                 .background(Color.White.copy(alpha = 0.30f))
                 .padding(30.dp)
@@ -203,6 +205,7 @@ private fun QuizHeader(remaining: Int, masteredCount: Int) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .zOffset { QuizCardFloatingOffset.toPx() }
             .clip(RoundedCornerShape(24.dp))
             .background(Color.White.copy(alpha = 0.34f))
             .padding(horizontal = 26.dp, vertical = 22.dp),
@@ -315,6 +318,7 @@ private fun IncorrectAnswerNotice(word: VocabWord, onContinue: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .zOffset { QuizCardFloatingOffset.toPx() }
             .clip(RoundedCornerShape(22.dp))
             .background(Color(0xFFFFE1DD).copy(alpha = 0.58f))
             .padding(horizontal = 18.dp, vertical = 14.dp),
@@ -431,3 +435,5 @@ private fun answerFeedbackState(option: AnswerOption, selectedOption: AnswerOpti
         option == selectedOption -> AnswerFeedbackState.Incorrect
         else -> AnswerFeedbackState.NeutralAnswered
     }
+
+private val QuizCardFloatingOffset = 10.dp

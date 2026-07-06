@@ -56,6 +56,7 @@ import com.example.spacewords.TopicBundleKey
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import com.pico.spatial.ui.foundation.layout.zOffset
 
 @Composable
 fun LearningScreen(bundle: Bundle?, modifier: Modifier = Modifier) {
@@ -163,7 +164,10 @@ fun LearningScreen(bundle: Bundle?, modifier: Modifier = Modifier) {
 
 @Composable
 private fun LearningHeader(topic: Topic, difficulty: Difficulty, currentPosition: Int, total: Int) {
-    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+    Column(
+        modifier = Modifier.zOffset { LearningContentFloatingOffset.toPx() },
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 Text(
@@ -211,6 +215,7 @@ private fun WordCard(word: VocabWord, topic: Topic, modifier: Modifier = Modifie
     Column(
         modifier = modifier
             .fillMaxWidth()
+            .zOffset { LearningCardFloatingOffset.toPx() }
             .clip(RoundedCornerShape(32.dp))
             .background(Color.White.copy(alpha = 0.32f))
             .padding(30.dp),
@@ -228,6 +233,7 @@ private fun WordCard(word: VocabWord, topic: Topic, modifier: Modifier = Modifie
                 topic = topic,
                 modifier = Modifier
                     .weight(1.18f)
+                    .zOffset { LearningContentFloatingOffset.toPx() }
                     .aspectRatio(1f)
             )
             Box(
@@ -358,6 +364,7 @@ private fun BatchCompleteDialog(
         Column(
             modifier = Modifier
                 .size(width = 560.dp, height = 360.dp)
+                .zOffset { LearningCardFloatingOffset.toPx() }
                 .clip(RoundedCornerShape(30.dp))
                 .backgroundMaterial(true, Material.Regular)
                 .padding(28.dp),
@@ -421,6 +428,8 @@ private fun ActionButton(onClick: () -> Unit, modifier: Modifier = Modifier, lab
 }
 
 private const val LearningBatchSize = 10
+private val LearningCardFloatingOffset = 10.dp
+private val LearningContentFloatingOffset = 8.dp
 
 private fun randomLearningBatch(words: List<VocabWord>): List<String> =
     words
