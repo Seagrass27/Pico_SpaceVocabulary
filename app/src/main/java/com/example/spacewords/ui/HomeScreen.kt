@@ -113,7 +113,7 @@ fun HomeScreen(modifier: Modifier = Modifier) {
                 WideActionPanel(
                     modifier = Modifier.weight(1f),
                     title = "Revision",
-                    subtitle = "Open your wordbook in a Mixed Stage orbit.",
+                    subtitle = "Review saved words around you in a spatial wordbook.",
                     value = "$revisionCount words",
                     enabled = revisionCount > 0,
                     onClick = {
@@ -159,13 +159,13 @@ private fun Header(
     ) {
         Column(Modifier.weight(1f)) {
             Text(
-                text = "SpaceWords",
+                text = "SpaceVocabulary",
                 color = Color(0xFF1F2733),
                 fontSize = 30.sp,
                 fontWeight = FontWeight.Bold
             )
             Text(
-                text = "A calm spatial vocabulary app for focused adult English learning.",
+                text = "A calm spatial vocabulary app for focused everyday English learning.",
                 color = Color(0xFF6D7684),
                 fontSize = 15.sp
             )
